@@ -139,6 +139,44 @@ Green API  ──POST Webhook──►  Apps Script Web App (doPost בקובץ �
    ולוודא שמופעל `incomingMessageReceived`.
 8. להריץ: `installTrigger()`, `installAlertTrigger()`, `installWeeklyTrigger()`.
 
+## 9א. מדריך Green API למנהל הנכנס — צעד אחר צעד
+
+### א. השתלטות על החשבון
+1. כניסה ל-console.green-api.com עם הפרטים מהמנהל היוצא.
+2. החלפת סיסמה מיד, ועדכון מייל החשבון למייל של המנהל החדש.
+3. בדיקת חיוב/מנוי (Billing) — העברת אמצעי התשלום, אחרת האינסטנס ייחסם.
+
+### ב. זיהוי האינסטנס ואימות מול הסקריפט
+1. במסוף: לרשום את **idInstance** ואת **apiTokenInstance** של האינסטנס.
+2. לוודא שהם זהים ל-`GREEN_ID_INSTANCE` ו-`GREEN_API_TOKEN` ב-Script Properties.
+3. מומלץ אחרי העברה: לחדש את הטוקן במסוף (Regenerate) — **ומיד** לעדכן את
+   `GREEN_API_TOKEN` בסקריפט. טוקן שחודש בלי עדכון = התראות ודוחות מתים בשקט.
+
+### ג. הגדרות ה-Webhook
+1. **Webhook URL** בהגדרות האינסטנס חייב להצביע על כתובת ה-Web App:
+   `https://script.google.com/macros/s/XXXXX/exec?token=<WEBHOOK_TOKEN>`
+   — הטוקן בכתובת חייב להיות זהה ל-`WEBHOOK_TOKEN` ב-Script Properties,
+   אחרת כל ההודעות נדחות בשקט.
+2. להפעיל: **Incoming webhooks** (`incomingMessageReceived`) — חובה.
+3. אפשר לכבות את כל שאר סוגי ההתראות (יוצאות, סטטוסים) — הקוד ממילא מסנן.
+4. שינויים נכנסים לתוקף תוך עד ~5 דקות.
+
+### ד. הפניית ההתראות למנהל החדש
+לעדכן ב-Script Properties את `ALERT_CHAT_ID` בפורמט `9725XXXXXXXX@c.us`.
+
+### ה. בדיקות (בסדר הזה)
+1. סטטוס האינסטנס במסוף = authorized (אם לא — סריקת QR מחדש).
+2. פתיחת כתובת ה-`/exec` בדפדפן → "הקולט פעיל".
+3. הרצת `testAlert()` → הודעה מגיעה לוואטסאפ של המנהל.
+4. הודעת ניסיון בקבוצה → שורה ב"תור נכנס" → "טופל" + שורה ביומן תוך ~דקה.
+   אם רק בדיקה 4 נכשלת — כמעט תמיד Webhook URL שגוי או טוקן לא תואם.
+
+### מלכודות נפוצות
+- Deploy **חדש** ב-Apps Script משנה את כתובת ה-`/exec` → חובה לעדכן ב-Green API.
+  עדכון גרסה ל-deployment קיים (Manage deployments → Edit → New version) שומר על הכתובת — עדיף.
+- המספר המחובר לאינסטנס חייב להישאר חבר בקבוצת הדיווחים.
+- לא למחוק את `GROUP_CHAT_ID` — בלעדיו נקלטות הודעות מכל הצ'אטים.
+
 ## 10. בדיקות קבלה (Acceptance)
 
 | בדיקה | איך | תוצאה צפויה |
