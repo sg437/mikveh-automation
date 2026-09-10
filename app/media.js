@@ -61,6 +61,8 @@
     const html = '<div class="mpick" id="' + id + '">' +
       '<label class="btn small" for="' + id + '_in" title="תמונה, סרטון או קובץ קול">📎 צרף</label>' +
       '<input id="' + id + '_in" type="file" accept="image/*,video/*,audio/*" multiple hidden>' +
+      (o.camera === false ? '' : '<button type="button" class="btn small cam" id="' + id + '_cam" title="צילום ישירות מהמצלמה">📷 צלם</button>' +
+        '<button type="button" class="btn small vid" id="' + id + '_vid" title="הסרטה ישירות מהמצלמה">🎬 הסרט</button>') +
       (o.record === false ? '' : '<button type="button" class="btn small rec" id="' + id + '_rec">🎤 הקלטה</button>') +
       '<div class="mprev"></div></div>';
     const bind = (root) => {
@@ -79,6 +81,9 @@
         Array.from(inp.files || []).forEach((f) => prepare(f).then(addThumb).catch((err) => MK().toast(err.message)));
         inp.value = '';
       });
+      const camBtn = box.querySelector('.cam'), vidBtn = box.querySelector('.vid');
+      if (camBtn) camBtn.addEventListener('click', () => openCamera('photo').then(addThumb).catch((err) => { if (err && err.message !== 'cancel') MK().toast(err.message); }));
+      if (vidBtn) vidBtn.addEventListener('click', () => openCamera('video').then(addThumb).catch((err) => { if (err && err.message !== 'cancel') MK().toast(err.message); }));
       const recBtn = box.querySelector('.rec');
       if (recBtn) {
         let rec = null, chunks = [], timer = null, t0 = 0;
@@ -103,6 +108,83 @@
       return { get: () => items, clear: () => { items = []; prev.innerHTML = ''; } };
     };
     return { html, bind };
+  }
+
+  /**
+   * מצלמה מובנית: צילום תמונה או הסרטת וידאו ישירות מהמערכת.
+   * mode = 'photo' | 'video'. מחזיר פריט מוכן להעלאה, או שגיאה 'cancel' אם בוטל.
+   */
+  function openCamera(mode) {
+    return new Promise((resolve, reject) => {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { reject(new Error('המכשיר לא תומך במצלמה מהדפדפן')); return; }
+      let stream = null, rec = null, chunks = [], timer = null, t0 = 0, facing = 'environment';
+
+      const bg = document.createElement('div');
+      bg.className = 'cammodal';
+      bg.innerHTML = '<div class="camwrap">' +
+        '<video autoplay playsinline muted></video>' +
+        '<canvas hidden></canvas>' +
+        '<div class="camtop"><span class="camt">' + (mode === 'video' ? '🎬 הסרטה' : '📷 צילום') + '</span><span class="camtime"></span><button type="button" class="camx" title="סגירה">✕</button></div>' +
+        '<div class="cambar">' +
+          '<button type="button" class="camflip" title="החלפת מצלמה">🔄</button>' +
+          '<button type="button" class="camshot ' + (mode === 'video' ? 'vid' : '') + '" title="' + (mode === 'video' ? 'התחלת הסרטה' : 'צילום') + '"></button>' +
+          '<span style="width:44px"></span>' +
+        '</div></div>';
+      document.body.appendChild(bg);
+      const video = bg.querySelector('video'), canvas = bg.querySelector('canvas');
+      const shot = bg.querySelector('.camshot'), timeEl = bg.querySelector('.camtime');
+
+      function stop() { if (timer) clearInterval(timer); if (stream) stream.getTracks().forEach((t) => t.stop()); bg.remove(); }
+      function fail(e) { stop(); reject(e); }
+      bg.querySelector('.camx').addEventListener('click', () => fail(new Error('cancel')));
+      bg.addEventListener('click', (e) => { if (e.target === bg) fail(new Error('cancel')); });
+
+      function start() {
+        if (stream) stream.getTracks().forEach((t) => t.stop());
+        navigator.mediaDevices.getUserMedia({ video: { facingMode: facing, width: { ideal: 1280 } }, audio: mode === 'video' })
+          .then((s) => { stream = s; video.srcObject = s; })
+          .catch(() => fail(new Error('אין הרשאה למצלמה. יש לאשר גישה בדפדפן.')));
+      }
+      bg.querySelector('.camflip').addEventListener('click', () => { facing = facing === 'environment' ? 'user' : 'environment'; start(); });
+      start();
+
+      shot.addEventListener('click', () => {
+        if (mode === 'photo') {
+          const w = video.videoWidth || 1280, h = video.videoHeight || 720;
+          const scale = Math.min(1, MAX_SIDE / Math.max(w, h));
+          canvas.width = Math.round(w * scale); canvas.height = Math.round(h * scale);
+          canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+          const data = canvas.toDataURL('image/jpeg', QUALITY);
+          const stamp = new Date().toLocaleString('he-IL').replace(/[/:]/g, '-');
+          stop();
+          resolve({ base64: data.split(',')[1], mime: 'image/jpeg', name: 'צילום ' + stamp + '.jpg', kind: 'image', preview: canvas.toDataURL('image/jpeg', 0.5) });
+          return;
+        }
+        if (!window.MediaRecorder) { fail(new Error('המכשיר לא תומך בהסרטה מהדפדפן')); return; }
+        if (rec && rec.state === 'recording') { rec.stop(); return; }
+        chunks = [];
+        const types = ['video/mp4', 'video/webm;codecs=vp9', 'video/webm'];
+        const type = types.filter((t) => MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(t))[0] || '';
+        rec = new MediaRecorder(stream, type ? { mimeType: type } : undefined);
+        rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
+        rec.onstop = () => {
+          clearInterval(timer);
+          const blob = new Blob(chunks, { type: rec.mimeType || 'video/webm' });
+          const secs = Math.round((Date.now() - t0) / 1000);
+          const ext = (rec.mimeType || '').indexOf('mp4') >= 0 ? '.mp4' : '.webm';
+          if (blob.size > MAX_MB * 1024 * 1024) { fail(new Error('הסרטון ארוך מדי (עד ' + MAX_MB + 'MB). נסה הסרטה קצרה יותר.')); return; }
+          const stamp = new Date().toLocaleString('he-IL').replace(/[/:]/g, '-');
+          stop();
+          toBase64(blob).then((base64) => resolve({ base64, mime: blob.type, name: 'סרטון ' + stamp + ' (' + secs + ' שניות)' + ext, kind: 'video', preview: null }));
+        };
+        rec.start(); t0 = Date.now(); shot.classList.add('on');
+        timer = setInterval(() => {
+          const s = Math.round((Date.now() - t0) / 1000);
+          timeEl.textContent = '● ' + Math.floor(s / 60) + ':' + ('0' + (s % 60)).slice(-2);
+          if (s >= 120) rec.stop(); // עד שתי דקות
+        }, 250);
+      });
+    });
   }
 
   /** מעלה רשימת פריטים (אחד אחרי השני) ומחזיר את הרשומות. */
@@ -168,5 +250,5 @@
   }
   function photosCount(m) { const K = MK(); return forMikveh(m.id).length + (K.S.wa[m.id] || []).reduce((n, w) => n + (w.media || []).length, 0); }
 
-  window.MikvehMedia = { shrink, prepare, picker, upload, forRef, forMikveh, thumbs, gallery, photosPane, photosCount, kindOf };
+  window.MikvehMedia = { shrink, prepare, picker, upload, forRef, forMikveh, thumbs, gallery, photosPane, photosCount, kindOf, openCamera };
 })();
