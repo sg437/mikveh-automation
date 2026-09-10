@@ -102,8 +102,13 @@ function doPost(e) {
   }
 }
 
-/** בדיקת חיים — פתיחת כתובת ה-Web App בדפדפן */
-function doGet() {
+/**
+ * GET: בלי פרמטרים — בדיקת חיים (פתיחת כתובת ה-Web App בדפדפן).
+ * עם ?action=... — ה-API של האפליקציה האחודה (ראה Api.js).
+ */
+function doGet(e) {
+  const action = (e && e.parameter && e.parameter.action) || '';
+  if (action) return apiHandle_(e, action);
   return ContentService.createTextOutput(
     '✅ מערכת כשרות המקוואות — הקולט פעיל. ' +
     Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'dd/MM/yyyy HH:mm:ss')

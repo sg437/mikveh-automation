@@ -17,6 +17,7 @@
     --gray-soft:#EDF0F3; --radius:10px; --shadow:0 1px 3px rgba(27,36,48,.08);
   }
   *{box-sizing:border-box;margin:0;padding:0}
+  [hidden]{display:none!important}
   html{font-size:16px}
   body{background:var(--bg);color:var(--ink);font-family:"Segoe UI","Arial Hebrew","Noto Sans Hebrew",Arial,sans-serif;min-height:100vh;line-height:1.45}
   a{color:var(--brand-2)}
@@ -30,7 +31,11 @@
   .brand h1{font-size:1.2rem;font-weight:800}
   .brand h1 span{color:var(--accent)}
   .brand .sub{font-size:.75rem;opacity:.8}
-  .head-meta{font-size:.78rem;opacity:.85}
+  .head-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+  .report-btn{background:var(--accent);color:var(--ink);border-color:var(--accent);font-size:.9rem}
+  .report-btn:hover{background:#F2D077}
+  .head-meta{font-size:.78rem;opacity:.95;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+  .head-meta .btn.small{padding:3px 9px;font-size:.74rem}
   nav{display:flex;gap:2px;flex-wrap:wrap}
   nav a{color:#D6E2EC;text-decoration:none;padding:9px 14px;font-weight:700;font-size:.9rem;border-radius:8px 8px 0 0}
   nav a.on{background:var(--bg);color:var(--ink)}
@@ -170,6 +175,33 @@
   .menu .dd a:hover{background:var(--brand-soft)}
   .footer{margin-top:24px;font-size:.74rem;color:var(--muted);text-align:center}
 
+  /* --- חלון דיווח --- */
+  .modal-bg{position:fixed;inset:0;background:rgba(18,60,90,.45);z-index:50;display:flex;align-items:flex-start;justify-content:center;padding:6vh 12px}
+  .modal{background:#fff;border-radius:14px;width:100%;max-width:560px;box-shadow:0 16px 40px rgba(0,0,0,.25);overflow:hidden}
+  .modal-head{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:var(--brand);color:#fff}
+  .modal-head h2{font-size:1.05rem}
+  .modal-head .x{background:none;border:none;color:#fff;font-size:1.1rem}
+  .modal-body{padding:16px}
+  .modal-body label{font-size:.8rem;font-weight:700;color:var(--muted);display:block;margin-bottom:5px}
+  .modal-body input{width:100%;padding:12px;border:2px solid var(--brand-2);border-radius:8px;font-size:1.05rem}
+  .ac{margin-top:6px;border:1px solid var(--line);border-radius:8px;overflow:hidden;max-height:300px;overflow-y:auto}
+  .ac:empty{display:none}
+  .ac button{display:flex;justify-content:space-between;width:100%;background:#fff;border:none;border-bottom:1px solid var(--line);padding:10px 12px;text-align:right;font-size:.95rem}
+  .ac button:hover,.ac button.sel{background:var(--brand-soft)}
+  .ac button small{color:var(--muted)}
+  .ac .hint{padding:10px 12px;color:var(--muted);font-size:.85rem}
+  .rm-chosen{display:flex;justify-content:space-between;align-items:center;background:var(--brand-soft);border-radius:8px;padding:10px 12px;margin-bottom:12px}
+  .rm-chosen .l{font-size:.72rem;color:var(--muted);font-weight:700}
+  .rm-chosen .v{font-size:1.15rem;font-weight:800;color:var(--brand)}
+  .rm-chosen .s{font-size:.8rem;color:var(--muted)}
+  .rm-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+  .rm-grid button{background:#fff;border:2px solid var(--line);border-radius:10px;padding:14px 10px;font-weight:800;font-size:.95rem;color:var(--brand);display:flex;flex-direction:column;align-items:center;gap:6px}
+  .rm-grid button:hover{border-color:var(--brand-2);background:var(--brand-soft)}
+  .rm-grid button .ic{font-size:1.5rem}
+  .rm-grid button small{font-weight:400;color:var(--muted);font-size:.74rem}
+  .rm-grid button.card{border-style:dashed}
+  .panel-tools{display:flex;justify-content:flex-end;margin-bottom:8px}
+
   @media (max-width:640px){
     .timeline li{grid-template-columns:1fr}
     .card-head h2{font-size:1.2rem}
@@ -187,11 +219,15 @@
           <div class="sub">כרטיס לכל מקווה · פעולות · פיקוח · משימות</div>
         </div>
       </div>
-      <div class="head-meta" id="headMeta"></div>
+      <div class="head-actions">
+        <button class="btn report-btn" id="btnReport" type="button">＋ דיווח / עדכון</button>
+        <div class="head-meta" id="headMeta"></div>
+      </div>
     </div>
     <nav id="nav">
       <a href="#/" data-view="list">מקוואות <span class="n" id="navCountList"></span></a>
       <a href="#/tasks" data-view="tasks">משימות פתוחות <span class="n" id="navCountTasks"></span></a>
+      <a href="#/whatsapp" data-view="whatsapp">דיווחי וואטסאפ <span class="n" id="navCountWa"></span></a>
       <a href="#/dashboard" data-view="dashboard">לוח בקרה</a>
       <a href="#/forms" data-view="forms">דיווח וטפסים</a>
     </nav>
@@ -211,6 +247,7 @@
         <div class="field"><label for="fAct">פעילות</label><select id="fAct"></select></div>
         <div class="field"><label for="fSort">מיון</label><select id="fSort"><option value="name">שם</option><option value="council">מועצה</option><option value="cert">תוקף תעודה</option><option value="insp">פיקוח אחרון</option><option value="tasks">משימות פתוחות</option></select></div>
         <button class="btn" id="btnClear" type="button">נקה סינון</button>
+        <button class="btn" id="btnExportList" type="button" title="ייצוא הרשימה המסוננת לאקסל">⬇ ייצוא לאקסל</button>
       </div>
       <div class="summary"><span id="listSummary"></span></div>
     </div>
@@ -228,11 +265,25 @@
         <div class="field grow"><label for="tq">חיפוש משימה</label><input id="tq" type="search" placeholder="שם מקווה / מועצה"></div>
         <div class="field"><label for="tAction">סוג משימה</label><select id="tAction"></select></div>
         <div class="field"><label for="tPri">עדיפות</label><select id="tPri"><option value="">הכל</option><option value="דחוף">דחוף</option><option value="כן">רגיל</option></select></div>
+        <button class="btn" id="btnExportTasks" type="button">⬇ ייצוא לאקסל</button>
       </div>
       <div class="summary"><span id="tasksSummary"></span></div>
     </div>
     <div class="tbl-wrap"><table id="tasksTable"></table></div>
     <div class="panel" style="margin-top:14px"><h3>מעקב פקקים ומילוי חוזר</h3><div id="plugsBox" class="tiles"></div></div>
+  </section>
+
+  <!-- ===== דיווחי וואטסאפ ===== -->
+  <section class="view" id="view-whatsapp">
+    <div class="toolbar">
+      <div class="row">
+        <div class="field grow"><label for="wq">חיפוש בדיווחים</label><input id="wq" type="search" placeholder="מקווה, יישוב, שולח, טקסט"></div>
+        <div class="field"><label for="wStatus">סטטוס זיהוי</label><select id="wStatus"></select></div>
+        <button class="btn" id="btnExportWa" type="button">⬇ ייצוא לאקסל</button>
+      </div>
+      <div class="summary"><span id="waSummary"></span></div>
+    </div>
+    <div id="waList"></div>
   </section>
 
   <!-- ===== לוח בקרה ===== -->
@@ -247,6 +298,26 @@
   <div class="footer" id="footer"></div>
 </main>
 
+<!-- ===== חלון דיווח / עדכון ===== -->
+<div class="modal-bg" id="reportModal" hidden>
+  <div class="modal" role="dialog" aria-labelledby="reportTitle">
+    <div class="modal-head"><h2 id="reportTitle">דיווח / עדכון</h2><button class="x" id="reportClose" type="button" aria-label="סגירה">✕</button></div>
+    <div class="modal-body">
+      <div id="rmStep1">
+        <label for="rmName">שם המקווה</label>
+        <input id="rmName" type="search" placeholder="התחל להקליד את שם המקווה..." autocomplete="off">
+        <div class="ac" id="rmList"></div>
+      </div>
+      <div id="rmStep2" hidden>
+        <div class="rm-chosen"><div><div class="l">מקווה</div><div class="v" id="rmChosenName"></div><div class="s" id="rmChosenSub"></div></div><button class="btn small" id="rmChange" type="button">החלף</button></div>
+        <div class="rm-grid" id="rmActions"></div>
+        <div class="note-box" style="margin:12px 0 0">בשלב זה כל כפתור פותח את טופס Google המתאים בחלון חדש. בשלב הבא הטפסים ייפתחו כאן, עם שם המקווה ממולא, ויעדכנו את הכרטיס ישירות בתאריך עברי.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="config.js"></script>
 <script src="hebdate.js"></script>
 <script src="data.js"></script>
 <script src="app.js"></script>

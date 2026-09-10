@@ -9,19 +9,38 @@
   'use strict';
 
   // ============================================================ מקור נתונים
+  // חיבור חי לגיליון דרך ה-Apps Script (Api.js). אם אין כתובת או שהרשת נופלת –
+  // האפליקציה ממשיכה לעבוד מקובץ data.js (עותק סטטי).
   const DataSource = {
+    config: function () { return window.MIKVEH_CONFIG || {}; },
+    url: function (action) {
+      const cfg = this.config();
+      if (!cfg.apiUrl) return null;
+      return cfg.apiUrl + (cfg.apiUrl.indexOf('?') >= 0 ? '&' : '?') + 'action=' + action +
+        (cfg.apiToken ? '&token=' + encodeURIComponent(cfg.apiToken) : '');
+    },
     load: function () {
-      // TODO(שלב 2): if (CONFIG.apiUrl) return fetch(CONFIG.apiUrl).then(r => r.json());
-      return Promise.resolve(window.MIKVEH_DATA);
+      const url = this.url('data');
+      const fallback = (err) => {
+        const d = Object.assign({}, window.MIKVEH_DATA || { mikvaot: [], actions: [], inspections: [], tasks: [], plugs: {}, meta: {} });
+        d.source = url ? 'fallback' : 'static';
+        d.loadError = err ? err.message : '';
+        return d;
+      };
+      if (!url) return Promise.resolve(fallback(null));
+      return fetch(url, { redirect: 'follow', cache: 'no-store' })
+        .then((r) => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json().then((d) => [d, r.headers.get('X-From-Cache') === '1']); })
+        .then(([d, cached]) => { if (d.error) throw new Error(d.error); d.source = cached ? 'cached' : 'live'; return d; })
+        .catch((err) => { console.warn('טעינה מהגיליון נכשלה, עובדים מהעותק המקומי:', err); return fallback(err); });
     }
   };
 
   const FORMS = [
-    { key: 'inspection', title: 'דו"ח פיקוח', desc: 'ביקורת הלכתית מלאה: גג, מאגר, אוצרות, בור טבילה, טכני', url: 'https://goo.gl/forms/u96Zky0MJzGuswGC3' },
-    { key: 'reservoir', title: 'דו"ח ריקון מאגר', desc: 'ריקון והחלפת מי גשמים במאגר', url: 'https://goo.gl/forms/oS2LeXLB00B7rnUs2' },
-    { key: 'zeria', title: 'דו"ח החלפת אוצר זריעה', desc: 'ריקון, איטום ומילוי אוצר הזריעה', url: 'https://goo.gl/forms/ZrVkRw29lhalbuPJ2' },
-    { key: 'hashaka', title: 'דו"ח החלפת אוצר השקה', desc: 'ריקון, איטום ומילוי אוצר ההשקה', url: 'https://goo.gl/forms/NUr4QBhyq6zonxu63' },
-    { key: 'bor', title: 'דו"ח טיפול בור טבילה', desc: 'טיפול ותיקונים בבור הטבילה', url: 'https://goo.gl/forms/Ykm1PFoyCLnCf2U73' },
+    { key: 'inspection', icon: '📋', title: 'דו"ח פיקוח', desc: 'ביקורת הלכתית מלאה: גג, מאגר, אוצרות, בור טבילה, טכני', url: 'https://goo.gl/forms/u96Zky0MJzGuswGC3' },
+    { key: 'reservoir', icon: '🌧', title: 'ריקון מאגר', desc: 'ריקון והחלפת מי גשמים במאגר', url: 'https://goo.gl/forms/oS2LeXLB00B7rnUs2' },
+    { key: 'zeria', icon: '🔄', title: 'החלפת אוצר זריעה', desc: 'ריקון, איטום ומילוי אוצר הזריעה', url: 'https://goo.gl/forms/ZrVkRw29lhalbuPJ2' },
+    { key: 'hashaka', icon: '🔁', title: 'החלפת אוצר השקה', desc: 'ריקון, איטום ומילוי אוצר ההשקה', url: 'https://goo.gl/forms/NUr4QBhyq6zonxu63' },
+    { key: 'bor', icon: '🛠', title: 'טיפול בור טבילה', desc: 'טיפול ותיקונים בבור הטבילה', url: 'https://goo.gl/forms/Ykm1PFoyCLnCf2U73' },
   ];
 
   // ============================================================ עזרים
@@ -88,7 +107,7 @@
   }
 
   // ============================================================ אינדקסים
-  const S = { data: null, byId: {}, actions: {}, insp: {}, tasks: {}, plugs: {}, derived: {}, list: [], listShown: 0, filters: {} };
+  const S = { data: null, byId: {}, actions: {}, insp: {}, tasks: {}, plugs: {}, wa: {}, derived: {}, list: [], listShown: 0, filters: {} };
 
   function buildIndexes(data) {
     S.data = data;
@@ -103,6 +122,17 @@
         if (m) push(S.plugs, m.id, Object.assign({ group: data.plugs[k].title }, p));
       });
     });
+    // דיווחי וואטסאפ: לפי שם מקווה, ואם אין – לפי יישוב (כל המקוואות של אותו יישוב)
+    data.whatsapp = data.whatsapp || [];
+    const byPlace = {};
+    data.mikvaot.forEach((m) => { [m.place, m.council].filter(Boolean).forEach((p) => push(byPlace, normName(p), m.id)); });
+    data.whatsapp.forEach((w) => {
+      const m = w.mikvehId ? S.byId[w.mikvehId] : findByName(w.mikveh);
+      if (m) { w.mikvehId = m.id; push(S.wa, m.id, w); return; }
+      const ids = byPlace[normName(w.settlement)] || [];
+      w.viaSettlement = ids.length > 0;
+      ids.forEach((id) => push(S.wa, id, w));
+    });
     data.mikvaot.forEach((m) => {
       const ins = (S.insp[m.id] || []).slice().sort((a, b) => b.ts.localeCompare(a.ts));
       const acts = (S.actions[m.id] || []).slice().sort((a, b) => (b.ts || '').localeCompare(a.ts || ''));
@@ -115,6 +145,7 @@
         inspCount: ins.length,
         actCount: acts.length,
         openTasks: tasks.length + (S.plugs[m.id] || []).length,
+        waCount: (S.wa[m.id] || []).length,
         urgent: tasks.some((t) => t.priority === 'דחוף') || (ins[0] && ins[0].urgent > 0),
       };
     });
@@ -145,6 +176,8 @@
       renderDashboard(); $('#view-dashboard').classList.add('on');
     } else if (view === 'forms') {
       renderForms(); $('#view-forms').classList.add('on');
+    } else if (view === 'whatsapp') {
+      renderWhatsappView(); $('#view-whatsapp').classList.add('on');
     } else {
       $('#view-list').classList.add('on');
     }
@@ -180,6 +213,7 @@
       $('#fCouncil').value = cur;
       applyList();
     });
+    $('#btnExportList').addEventListener('click', () => exportMikvaot(S.list));
     $('#btnClear').addEventListener('click', () => {
       ['q', 'fRegion', 'fCouncil', 'fSup', 'fCert', 'fAct'].forEach((id) => { $('#' + id).value = ''; });
       $('#fSort').value = 'name';
@@ -269,8 +303,7 @@
     const plugs = S.plugs[m.id] || [];
     const li = ins[0];
 
-    const formMenu = '<div class="menu" id="formMenu"><button class="btn primary" type="button">דיווח חדש ▾</button><div class="dd">' +
-      FORMS.map((f) => '<a href="' + f.url + '" target="_blank" rel="noopener">' + esc(f.title) + '</a>').join('') + '</div></div>';
+    const formMenu = '<button class="btn primary" id="cardReport" type="button">＋ דיווח / עדכון</button>';
 
     const head = '<a class="back" href="#/">‹ חזרה לרשימה</a>' +
       '<div class="card-head"><div class="title"><div>' +
@@ -292,7 +325,7 @@
 
     const tabs = [
       ['details', 'פרטים'], ['otzarot', 'אוצרות ומאגר'], ['history', 'היסטוריית פעולות', acts.length],
-      ['inspections', 'דוחות פיקוח', ins.length], ['tasks', 'משימות', tasks.length + plugs.length], ['whatsapp', 'דיווחי וואטסאפ'],
+      ['inspections', 'דוחות פיקוח', ins.length], ['tasks', 'משימות', tasks.length + plugs.length], ['whatsapp', 'דיווחי וואטסאפ', (S.wa[m.id] || []).length],
     ];
     const tabBar = '<div class="tabs">' + tabs.map(([k, t, n]) =>
       '<button type="button" data-tab="' + k + '" class="' + (k === tab ? 'on' : '') + '">' + t + (n != null ? '<span class="n">' + n + '</span>' : '') + '</button>').join('') + '</div>';
@@ -303,7 +336,7 @@
       history: renderHistory(acts),
       inspections: renderInspections(ins),
       tasks: renderCardTasks(tasks, plugs),
-      whatsapp: '<div class="panel"><h3>דיווחי וואטסאפ</h3><div class="note-box">כאן יוצגו הדיווחים שמגיעים מקבוצת הוואטסאפ (מערכת הקליטה עם Green API וג\'מיני) ומזוהים למקווה זה. החיבור ליומן הדיווחים ייעשה בשלב הבא.</div></div>',
+      whatsapp: renderWhatsapp(S.wa[m.id] || [], m),
     };
     root.innerHTML = head + tabBar + Object.keys(panes).map((k) => '<div class="pane ' + (k === tab ? 'on' : '') + '" data-pane="' + k + '">' + panes[k] + '</div>').join('');
 
@@ -312,9 +345,11 @@
       root.querySelectorAll('.tabs button').forEach((x) => x.classList.toggle('on', x === b));
       root.querySelectorAll('.pane').forEach((p) => p.classList.toggle('on', p.dataset.pane === b.dataset.tab));
     }));
-    const menu = $('#formMenu');
-    menu.querySelector('button').addEventListener('click', (e) => { e.stopPropagation(); menu.classList.toggle('open'); });
-    document.addEventListener('click', () => menu.classList.remove('open'), { once: true });
+    $('#cardReport').addEventListener('click', () => openReport(m));
+    root.querySelectorAll('[data-export]').forEach((b) => b.addEventListener('click', () => {
+      if (b.dataset.export === 'history') exportActions(acts, m.name);
+      else exportInspections(ins, m.name);
+    }));
   }
 
   function renderDetails(m) {
@@ -385,12 +420,12 @@
         '<div class="t"><div class="h">' + esc(a.action) + ' ' + bits.join(' ') + '</div>' +
         '<div class="n">' + esc([a.rabbi, a.attendant, a.phone].filter(Boolean).join(' · ')) + (notes ? '<br>' + esc(notes) : '') + '</div></div></li>';
     }).join('');
-    return '<div class="panel"><h3>יומן פעולות</h3><ul class="timeline">' + items + '</ul></div>';
+    return '<div class="panel"><h3>יומן פעולות</h3><div class="panel-tools"><button class="btn small" type="button" data-export="history">⬇ ייצוא לאקסל</button></div><ul class="timeline">' + items + '</ul></div>';
   }
 
   function renderInspections(ins) {
     if (!ins.length) return '<div class="panel"><div class="empty">אין דוחות פיקוח מפורטים למקווה זה</div></div>';
-    return '<div class="panel"><h3>דוחות פיקוח הלכתי</h3>' + ins.map((i, idx) => {
+    return '<div class="panel"><h3>דוחות פיקוח הלכתי</h3><div class="panel-tools"><button class="btn small" type="button" data-export="inspections">⬇ ייצוא לאקסל</button></div>' + ins.map((i, idx) => {
       const secs = (i.sections || []).filter((s) => s.fields.length).map((s) =>
         '<div class="sec"><h4>' + esc(s.title) + '<span>' + secBadges(s) + '</span></h4>' +
         s.fields.map((f) => {
@@ -430,6 +465,7 @@
       tasksInit = true;
       fillSelect($('#tAction'), uniq(all.map((t) => t.action)));
       ['tq', 'tAction', 'tPri'].forEach((id) => { const el = $('#' + id); el.addEventListener(el.tagName === 'INPUT' ? 'input' : 'change', renderTasks); });
+      $('#btnExportTasks').addEventListener('click', () => exportTasks(S.tasksShown || []));
       $('#tasksTable').addEventListener('click', (e) => {
         const tr = e.target.closest('tr.link');
         if (tr && tr.dataset.id) location.hash = '#/m/' + encodeURIComponent(tr.dataset.id) + '/tasks';
@@ -446,6 +482,7 @@
     const list = all.filter((t) => (!q || (t.mikveh + ' ' + (t.council || '')).toLowerCase().includes(q)) && (!act || t.action === act) && (!pri || t.priority === pri));
     const order = { 'דחוף': 0, 'כן': 1 };
     list.sort((a, b) => (order[a.priority] ?? 2) - (order[b.priority] ?? 2) || (a.council || '').localeCompare(b.council || '', 'he'));
+    S.tasksShown = list;
     $('#tasksSummary').innerHTML = '<b>' + list.length + '</b> משימות · <b>' + list.filter((t) => t.priority === 'דחוף').length + '</b> דחופות';
     $('#tasksTable').innerHTML = TASK_HEAD + '<tbody>' + (list.length ? list.map(taskRow).join('') : '<tr><td colspan="8" class="empty">אין משימות</td></tr>') + '</tbody>';
   }
@@ -503,19 +540,215 @@
     return entries.map(([k, n]) => '<div class="bar"><span class="lbl">' + esc(k) + '</span><div class="trk"><div class="fil" style="width:' + Math.max(2, Math.round(100 * n / (max || 1))) + '%"></div></div><span class="num">' + n + '</span></div>').join('');
   }
 
+  // ============================================================ וואטסאפ
+  function waItem(w, showMikveh) {
+    const media = (w.media || []).map((u, i) => '<a href="' + esc(u) + '" target="_blank" rel="noopener">מדיה ' + (i + 1) + '</a>').join(' · ');
+    const target = showMikveh ? (w.mikvehId ? '<a href="#/m/' + encodeURIComponent(w.mikvehId) + '/whatsapp">' + esc(w.mikveh || w.settlement) + '</a>' : esc(w.mikveh || w.settlement || '')) : '';
+    const statusCls = /מזוהה|זוהה/.test(w.status || '') && !/לא/.test(w.status || '') ? 'ok' : /בירור/.test(w.status || '') ? 'warn' : '';
+    return '<li><div class="d">' + esc(hebOf(w.ts) || w.ts || '') + '<small>' + esc(fmtDate(w.ts) + (parseISO(w.ts) ? ' ' + parseISO(w.ts).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' }) : '')) + '</small></div>' +
+      '<div class="t"><div class="h">' + (target ? target + ' · ' : '') + esc(w.sender || w.phone || '') + ' ' +
+        (w.defect ? badge(w.defect, 'warn') : '') + (w.status ? badge(w.status, statusCls) : '') + (w.viaSettlement ? badge('לפי יישוב', '') : '') + '</div>' +
+      '<div>' + esc(w.summary || w.text || '') + '</div>' +
+      (w.summary && w.text && w.text !== w.summary ? '<div class="n">' + esc(w.text) + '</div>' : '') +
+      ((media || w.archive) ? '<div class="n">' + media + (w.archive ? (media ? ' · ' : '') + '<a href="' + esc(w.archive) + '" target="_blank" rel="noopener">קובץ מקורי</a>' : '') + '</div>' : '') +
+      '</div></li>';
+  }
+  function waNotice() {
+    const src = S.data.source;
+    if (src === 'live') return '';
+    if (src === 'cached') return '<div class="note-box">אין חיבור כרגע, מוצג העותק השמור האחרון מהגיליון.</div>';
+    return '<div class="note-box">' + (src === 'static'
+      ? 'האפליקציה עובדת מעותק סטטי. דיווחי הוואטסאפ מגיעים רק בחיבור חי לגיליון (הגדרת apiUrl בקובץ config.js).'
+      : 'לא הצלחנו להתחבר לגיליון, מוצג העותק המקומי האחרון.') + '</div>';
+  }
+  function renderWhatsapp(list, m) {
+    const items = list.slice().sort((a, b) => (b.ts || '').localeCompare(a.ts || ''));
+    return '<div class="panel"><h3>דיווחי וואטסאפ</h3>' + waNotice() +
+      (items.length ? '<ul class="timeline">' + items.map((w) => waItem(w, false)).join('') + '</ul>' :
+        '<div class="empty">אין דיווחי וואטסאפ שזוהו למקווה זה' + (m.place ? ' או ליישוב ' + esc(m.place) : '') + '</div>') + '</div>';
+  }
+  let waInit = false;
+  function renderWhatsappView() {
+    const all = S.data.whatsapp || [];
+    if (!waInit) {
+      waInit = true;
+      $('#wq').addEventListener('input', renderWhatsappView);
+      $('#wStatus').addEventListener('change', renderWhatsappView);
+      fillSelect($('#wStatus'), uniq(all.map((w) => w.status)));
+      $('#btnExportWa').addEventListener('click', () => exportWhatsapp(S.waShown || []));
+    }
+    const q = $('#wq').value.trim().toLowerCase(), st = $('#wStatus').value;
+    const list = all.filter((w) => (!st || w.status === st) && (!q || [w.mikveh, w.settlement, w.sender, w.text, w.summary, w.defect].join(' ').toLowerCase().includes(q)))
+      .sort((a, b) => (b.ts || '').localeCompare(a.ts || '')).slice(0, 300);
+    S.waShown = list;
+    $('#waSummary').innerHTML = '<b>' + list.length + '</b> דיווחים מוצגים מתוך <b>' + all.length + '</b>';
+    $('#waList').innerHTML = waNotice() + (list.length ? '<div class="panel"><ul class="timeline">' + list.map((w) => waItem(w, true)).join('') + '</ul></div>' : '<div class="empty">אין דיווחים</div>');
+  }
+
   // ============================================================ טפסים
   function renderForms() {
     $('#formsList').innerHTML = FORMS.map((f) => '<a class="form-link" href="' + f.url + '" target="_blank" rel="noopener"><b>' + esc(f.title) + '</b><small>' + esc(f.desc) + '</small></a>').join('');
   }
+
+  // ============================================================ ייצוא לאקסל
+  let xlsxLoading = null;
+  function loadXlsx() {
+    if (window.XLSX) return Promise.resolve(window.XLSX);
+    if (xlsxLoading) return xlsxLoading;
+    xlsxLoading = new Promise((resolve, reject) => {
+      const sc = document.createElement('script');
+      sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+      sc.onload = () => resolve(window.XLSX);
+      sc.onerror = () => { xlsxLoading = null; reject(new Error('xlsx lib')); };
+      document.head.appendChild(sc);
+    });
+    return xlsxLoading;
+  }
+  function download(blob, name) {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  }
+  /** rows = מערך אובייקטים עם מפתחות בעברית (סדר המפתחות = סדר העמודות).
+   *  שם הקובץ באנגלית (חלק מהדפדפנים מאבדים שם קובץ בעברית), שם הגיליון בעברית. */
+  function exportTable(rows, sheetName, fileBase) {
+    if (!rows.length) { alert('אין נתונים לייצוא'); return; }
+    const stamp = new Date().toISOString().slice(0, 10);
+    const name = fileBase.replace(/[^\w-]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '') + '-' + stamp;
+    loadXlsx().then((XLSX) => {
+      const ws = XLSX.utils.json_to_sheet(rows);
+      const keys = Object.keys(rows[0]);
+      ws['!cols'] = keys.map((k) => ({ wch: Math.min(45, Math.max(10, k.length + 2, ...rows.slice(0, 200).map((r) => String(r[k] == null ? '' : r[k]).length))) }));
+      const wb = XLSX.utils.book_new();
+      wb.Workbook = { Views: [{ RTL: true }] };
+      XLSX.utils.book_append_sheet(wb, ws, sheetName.slice(0, 30));
+      XLSX.writeFile(wb, name + '.xlsx');
+    }).catch(() => {
+      // ללא רשת: CSV עם BOM (נפתח באקסל עם עברית תקינה)
+      const keys = Object.keys(rows[0]);
+      const q = (v) => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
+      const csv = '\ufeff' + keys.map(q).join(',') + '\n' + rows.map((r) => keys.map((k) => q(r[k])).join(',')).join('\n');
+      download(new Blob([csv], { type: 'text/csv;charset=utf-8' }), name + '.csv');
+    });
+  }
+  const L = () => (S.data.meta && S.data.meta.fieldLabels) || {};
+  function exportMikvaot(list) {
+    const lab = L();
+    const cols = ['name', 'council', 'place', 'address', 'region', 'localityType', 'activity', 'supervised', 'certificate', 'attendant', 'phone', 'mikvehPhone', 'ownership', 'reservoir', 'reservoirEmptied', 'otzarZeria', 'zeriaReplaced', 'otzarHashaka', 'hashakaType', 'hashakaReplaced', 'chabadReplaced', 'filter', 'kelim', 'otzarLocation', 'hoursSummer', 'hoursWinter', 'hoursErev', 'hoursMotzash', 'accessibility', 'coordination', 'notes', 'notes2'];
+    exportTable(list.map((m) => {
+      const d = S.derived[m.id], o = {};
+      cols.forEach((k) => { o[lab[k] || k] = m[k] || ''; });
+      o['מצב תעודה'] = { ok: 'בתוקף', warn: 'פג בקרוב', bad: 'פג תוקף', none: 'אין' }[d.cert.key];
+      o['פיקוח מפורט אחרון'] = d.lastInsp ? (d.lastInsp.hebDate || hebOf(d.lastInsp.ts)) : (m.lastInspection || '');
+      o['פעולה אחרונה'] = d.lastAction ? d.lastAction.action + ' (' + hebOf(d.lastAction.ts) + ')' : '';
+      o['משימות פתוחות'] = d.openTasks;
+      o['דיווחי וואטסאפ'] = d.waCount || 0;
+      return o;
+    }), 'מקוואות', 'mikvaot');
+  }
+  function exportActions(acts, title) {
+    exportTable(acts.map((a) => ({
+      'תאריך עברי': hebOf(a.ts), 'תאריך': fmtDate(a.ts), 'שם המקוה': a.mikveh, 'פעולה': a.action, 'אוצר': a.otzar || '', 'שם הרב': a.rabbi || '',
+      'אחראי / בלנית': a.attendant || '', 'טלפון': a.phone || '', 'ריקון': a.drained || '', 'איטום': a.sealed || '', 'מילוי': a.filled || '',
+      'איטום גג': a.roofSealed || '', 'איטום מאגר': a.reservoirSealed || '', 'ליטר': a.liters || '', 'תוקף עד': [a.validMonth, a.validYear].filter(Boolean).join(' '),
+      'הערה': [a.note, a.note2].filter(Boolean).join(' · '),
+    })), 'פעולות', 'actions-' + (title ? 'mikveh' : 'all'));
+  }
+  function exportInspections(ins, title) {
+    exportTable(ins.map((i) => {
+      const o = { 'תאריך עברי': i.hebDate || hebOf(i.ts), 'תאריך': fmtDate(i.ts), 'שם המקוה': i.mikveh, 'מועצה': i.council || '', 'שם הרב': i.rabbi || '', 'תיקון דחוף': i.urgent, 'טעון תיקון': i.needed,
+        'ריקון מאגר': i.reservoirEmpty || '', 'החלפת זריעה': i.zeriaReplace || '', 'החלפת השקה': i.hashakaReplace || '' };
+      (i.sections || []).forEach((s) => s.fields.forEach((f) => { o[s.title + ' - ' + f[0]] = f[1]; }));
+      o['הנחיות מיוחדות'] = i.guidance || '';
+      return o;
+    }), 'פיקוח', 'inspections-' + (title ? 'mikveh' : 'all'));
+  }
+  function exportTasks(list) {
+    exportTable(list.map((t) => ({ 'מקווה': t.mikveh, 'מועצה': t.council || '', 'משימה': t.action || '', 'עדיפות': t.priority || '', 'מצב מאגר / נקב': t.state || '',
+      'תיקונים': t.repairs || 0, 'תיקוני גג': t.roofRepairs || 0, 'טעון ריקון': t.needsEmptying || '', 'פקק על הגג': t.roofPlug || '' })), 'משימות', 'tasks');
+  }
+  function exportWhatsapp(list) {
+    exportTable(list.map((w) => ({ 'תאריך עברי': hebOf(w.ts), 'תאריך ושעה': w.ts || '', 'שם מקווה': w.mikveh || '', 'יישוב': w.settlement || '', 'שולח': w.sender || '', 'טלפון': w.phone || '',
+      'סוג ליקוי': w.defect || '', 'תקציר': w.summary || '', 'טקסט': w.text || '', 'סטטוס זיהוי': w.status || '', 'מדיה': (w.media || []).join(' '), 'קובץ מקורי': w.archive || '' })), 'וואטסאפ', 'whatsapp');
+  }
+
+  // ============================================================ חלון דיווח / עדכון
+  const RM = { chosen: null, sel: 0, matches: [] };
+  function openReport(m) {
+    RM.chosen = m || null;
+    $('#reportModal').hidden = false;
+    if (m) rmShowStep2(); else { rmShowStep1(); }
+  }
+  function closeReport() { $('#reportModal').hidden = true; }
+  function rmShowStep1() {
+    $('#rmStep1').hidden = false; $('#rmStep2').hidden = true;
+    $('#rmName').value = ''; rmSearch(''); setTimeout(() => $('#rmName').focus(), 50);
+  }
+  function rmSearch(q) {
+    const terms = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    const list = $('#rmList');
+    if (!terms.length) { list.innerHTML = '<div class="hint">הקלד חלק משם המקווה, היישוב או המועצה</div>'; RM.matches = []; return; }
+    const scored = [];
+    S.data.mikvaot.forEach((m) => {
+      const name = (m.name || '').toLowerCase(), hay = [m.name, m.place, m.council].join(' ').toLowerCase();
+      if (!terms.every((t) => hay.includes(t))) return;
+      scored.push([name.startsWith(terms[0]) ? 0 : name.includes(terms[0]) ? 1 : 2, m]);
+    });
+    scored.sort((a, b) => a[0] - b[0] || a[1].name.localeCompare(b[1].name, 'he'));
+    RM.matches = scored.slice(0, 10).map((x) => x[1]); RM.sel = 0;
+    list.innerHTML = RM.matches.length ? RM.matches.map((m, i) => '<button type="button" data-i="' + i + '" class="' + (i === 0 ? 'sel' : '') + '"><span>' + esc(m.name) + '</span><small>' + esc([m.council, m.region].filter(Boolean).join(' · ')) + '</small></button>').join('') +
+      (scored.length > 10 ? '<div class="hint">ועוד ' + (scored.length - 10) + ' תוצאות, המשך להקליד</div>' : '') : '<div class="hint">לא נמצא מקווה מתאים</div>';
+  }
+  function rmChoose(m) { RM.chosen = m; rmShowStep2(); }
+  function rmShowStep2() {
+    const m = RM.chosen;
+    $('#rmStep1').hidden = true; $('#rmStep2').hidden = false;
+    $('#rmChosenName').textContent = m.name;
+    $('#rmChosenSub').textContent = [m.council, m.region, m.address].filter(Boolean).join(' · ');
+    $('#rmActions').innerHTML = FORMS.map((f) => '<button type="button" data-form="' + f.key + '"><span class="ic">' + f.icon + '</span>' + esc(f.title) + '<small>' + esc(f.desc) + '</small></button>').join('') +
+      '<button type="button" class="card" data-form="card"><span class="ic">📁</span>פתיחת הכרטיס<small>כל הנתונים של המקווה</small></button>';
+  }
+  function initReport() {
+    $('#btnReport').addEventListener('click', () => openReport(null));
+    $('#reportClose').addEventListener('click', closeReport);
+    $('#reportModal').addEventListener('click', (e) => { if (e.target === $('#reportModal')) closeReport(); });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('#reportModal').hidden) closeReport(); });
+    $('#rmName').addEventListener('input', (e) => rmSearch(e.target.value));
+    $('#rmName').addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowDown') { RM.sel = Math.min(RM.sel + 1, RM.matches.length - 1); rmHighlight(); e.preventDefault(); }
+      else if (e.key === 'ArrowUp') { RM.sel = Math.max(RM.sel - 1, 0); rmHighlight(); e.preventDefault(); }
+      else if (e.key === 'Enter' && RM.matches[RM.sel]) { rmChoose(RM.matches[RM.sel]); e.preventDefault(); }
+    });
+    $('#rmList').addEventListener('click', (e) => { const b = e.target.closest('button[data-i]'); if (b) rmChoose(RM.matches[+b.dataset.i]); });
+    $('#rmChange').addEventListener('click', rmShowStep1);
+    $('#rmActions').addEventListener('click', (e) => {
+      const b = e.target.closest('button[data-form]'); if (!b) return;
+      const m = RM.chosen;
+      if (b.dataset.form === 'card') { closeReport(); location.hash = '#/m/' + encodeURIComponent(m.id); return; }
+      const f = FORMS.find((x) => x.key === b.dataset.form);
+      window.open(f.url, '_blank', 'noopener');
+    });
+  }
+  function rmHighlight() { $('#rmList').querySelectorAll('button[data-i]').forEach((b, i) => b.classList.toggle('sel', i === RM.sel)); }
 
   // ============================================================ הפעלה
   DataSource.load().then((data) => {
     buildIndexes(data);
     $('#navCountList').textContent = data.mikvaot.length;
     $('#navCountTasks').textContent = data.tasks.length;
-    $('#headMeta').textContent = 'היום: ' + HebDate.format(new Date()) + ' · נתונים מעודכנים ל-' + fmtDate(data.meta.exportedAt);
-    $('#footer').textContent = 'מקור הנתונים: קובץ האקסל ההיסטורי (' + data.mikvaot.length + ' מקוואות, ' + data.actions.length + ' פעולות, ' + data.inspections.length + ' דוחות פיקוח). גרסת מערכת 0.1';
+    $('#navCountWa').textContent = (data.whatsapp || []).length;
+    const when = data.meta && data.meta.exportedAt ? parseISO(data.meta.exportedAt) : null;
+    const whenTxt = when ? when.toLocaleString('he-IL', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+    const srcTxt = data.source === 'live' ? '<span class="badge ok">מחובר לגיליון</span> ' + esc(whenTxt)
+      : data.source === 'cached' ? '<span class="badge warn">לא מקוון</span> עותק שמור מהגיליון מ-' + esc(whenTxt)
+      : data.source === 'fallback' ? '<span class="badge bad">אין חיבור לגיליון</span> עותק מקומי מ-' + esc(whenTxt)
+      : '<span class="badge">עותק סטטי</span> ' + esc(whenTxt);
+    $('#headMeta').innerHTML = 'היום: ' + esc(HebDate.format(new Date())) + ' · ' + srcTxt + ' <button class="btn small" id="btnReload" type="button" title="טעינה מחדש מהגיליון">רענן</button>';
+    $('#btnReload').addEventListener('click', () => location.reload());
+    $('#footer').textContent = (data.source === 'live' || data.source === 'cached' ? 'מקור הנתונים: ' + (data.meta.spreadsheet || 'הגיליון החי') : 'מקור הנתונים: עותק מקומי של הגיליון') +
+      ' (' + data.mikvaot.length + ' מקוואות, ' + data.actions.length + ' פעולות, ' + data.inspections.length + ' דוחות פיקוח, ' + (data.whatsapp || []).length + ' דיווחי וואטסאפ). גרסת מערכת 0.2';
     initList();
+    initReport();
     window.addEventListener('hashchange', route);
     route();
     if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
