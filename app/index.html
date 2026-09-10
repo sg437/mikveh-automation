@@ -314,14 +314,27 @@
   .chtitle{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;border-bottom:1px solid var(--line);padding-bottom:8px;margin-bottom:8px}
   .chtitle h2{font-size:1.1rem;color:var(--brand)}
   .chtitle .sub{font-size:.8rem;color:var(--muted)}
-  .thread{max-height:60vh;overflow-y:auto;display:flex;flex-direction:column;gap:8px;padding:4px 0}
-  .msg{background:var(--gray-soft);border-radius:12px;padding:8px 12px;max-width:85%;align-self:flex-start}
-  .msg.me{background:var(--brand-soft);align-self:flex-end}
-  .msg .mh{display:flex;justify-content:space-between;gap:10px;font-size:.78rem;color:var(--muted)}
-  .msg .mh b{color:var(--brand)}
-  .msg .mb{font-size:.93rem;margin-top:3px;white-space:pre-wrap}
-  .msg .mq{border-inline-start:3px solid var(--brand-2);padding:3px 8px;margin-top:4px;font-size:.78rem;color:var(--muted);background:#fff;border-radius:4px}
+  .thread{max-height:62vh;overflow-y:auto;display:flex;flex-direction:column;gap:6px;padding:8px 4px;background:linear-gradient(0deg,var(--brand-soft) 0%,var(--bg) 100%);border-radius:10px}
+  .thread .row{display:flex;gap:6px;align-items:flex-end;max-width:88%}
+  .thread .row.me{align-self:flex-end;flex-direction:row-reverse}
+  .av{width:28px;height:28px;border-radius:50%;color:#fff;display:flex;align-items:center;justify-content:center;font-size:.72rem;font-weight:800;flex:none;margin-bottom:14px}
+  .msg{background:#fff;border-radius:12px 12px 12px 4px;padding:6px 10px 4px;box-shadow:0 1px 1px rgba(0,0,0,.12);position:relative;min-width:120px}
+  .msg.me{background:#DCF6E8;border-radius:12px 12px 4px 12px}
+  .msg .mh{font-size:.78rem;margin-bottom:1px}
+  .msg .mh b{font-weight:800}
+  .msg .mb{font-size:.93rem;white-space:pre-wrap;word-break:break-word}
+  .msg .mq{display:block;width:100%;text-align:right;border:none;border-inline-start:3px solid var(--brand-2);padding:4px 8px;margin-bottom:4px;font-size:.78rem;color:var(--muted);background:rgba(18,60,90,.06);border-radius:6px;cursor:pointer}
+  .msg .mq b{display:block;color:var(--brand);font-size:.74rem}
+  .msg.flash{animation:flash 1.2s}
+  @keyframes flash{0%,100%{box-shadow:0 1px 1px rgba(0,0,0,.12)}30%{box-shadow:0 0 0 3px var(--accent)}}
+  .mfoot{display:flex;align-items:center;gap:8px;justify-content:flex-end;font-size:.7rem;color:var(--muted);margin-top:1px}
+  .mfoot .tick{color:#34B7F1;font-size:.72rem}
+  .mfoot .lnk{font-size:.7rem}
+  .daysep{text-align:center;margin:6px 0}
+  .daysep span{background:rgba(18,60,90,.10);color:var(--brand);border-radius:12px;padding:2px 12px;font-size:.72rem;font-weight:700}
   .msg .ma{text-align:left}
+  .ctpl{display:flex;gap:6px;flex-wrap:wrap}
+  .ctpl .chip{cursor:pointer}
   .msg.sys{background:transparent;border:1px dashed var(--line);align-self:center;max-width:95%;font-size:.85rem}
   .lnk{background:none;border:none;color:var(--brand-2);font-size:.76rem;padding:0;cursor:pointer}
   .composer{margin-top:10px;border-top:1px solid var(--line);padding-top:10px}
@@ -611,6 +624,7 @@
 <script src="media.js"></script>
 <script src="edit.js"></script>
 <script src="perms.js"></script>
+<script src="contractor.js"></script>
 <script src="auth.js"></script>
 </body>
 </html>

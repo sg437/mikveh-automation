@@ -58,12 +58,15 @@ const API_INSPECTION_SECTIONS = [
 
 function apiHandle_(e, action) {
   try {
+    if (action === 'public') return apiPublic_(e); // ציבורי – בלי טוקן
     const token = getProp_(API.TOKEN_PROP);
     const given = (e.parameter && e.parameter.token) || '';
     if (token && given !== token) {
       return jsonResponse_({ error: 'unauthorized' });
     }
     if (action === 'ping') return jsonResponse_(apiPing_());
+    // ---- API ציבורי לאתר (בלי טוקן): רק מידע שמיועד לציבור ----
+    if (action === 'public') return apiPublic_(e);
     if (action === 'whatsapp') return jsonResponse_({ whatsapp: apiWhatsapp_() });
     if (action === 'messages') return jsonResponse_({ messages: apiMessages_(apiSpreadsheet_(), (e.parameter && e.parameter.since) || '') });
     if (action === 'sync') {
@@ -127,6 +130,8 @@ function apiBuildData_() {
   const media = apiMedia_(ss);
   const groups = apiGroups_(ss);
   const reactions = apiReactions_(ss);
+  const contractors = apiContractors_(ss);
+  const contractorMsgs = apiContractorMsgs_(ss);
 
   // קישור לפי שם מקווה מנורמל
   const ids = {};
@@ -149,7 +154,8 @@ function apiBuildData_() {
       fieldLabels: labels,
     },
     mikvaot: mikvaot, actions: actions, inspections: inspections, tasks: tasks, plugs: plugs, whatsapp: whatsapp, messages: messages, work: work, media: media,
-    groups: groups, reactions: reactions, users: authPublicUsers_(ss), perms: authPerms_(ss),
+    groups: groups, reactions: reactions, contractors: contractors, contractorMsgs: contractorMsgs,
+    users: authPublicUsers_(ss), perms: authPerms_(ss),
   };
 }
 
@@ -364,4 +370,55 @@ function testApi() {
   Logger.log(JSON.stringify(data.meta));
   Logger.log('דוגמה: ' + JSON.stringify(data.mikvaot[0]));
   Logger.log('וואטסאפ אחרון: ' + JSON.stringify(data.whatsapp[0] || null));
+}
+
+
+// ==================== API ציבורי לאתר ====================
+/**
+ * <WebApp URL>?action=public                — כל המקוואות הפעילים שבפיקוח
+ * &council=... &region=... &q=...           — סינון
+ * &callback=fn                              — JSONP (לאתר שלא יכול לקרוא JSON חוצה-דומיין)
+ * &since=<ISO>                              — רק מה שהשתנה מאז (לפי updatedAt)
+ *
+ * מוחזר רק מידע שמיועד לציבור: שם, יישוב, כתובת, מצב (פעיל / בשיפוץ / סגור),
+ * טלפונים, שעות פתיחה, הנגשה, תאום מראש, ותוקף תעודת הכשרות.
+ */
+function apiPublic_(e) {
+  const p = (e && e.parameter) || {};
+  const ss = apiSpreadsheet_();
+  const mikvaot = apiMikvaot_(ss);
+  const contractors = {};
+  apiContractors_(ss).forEach(function (c) { contractors[apiNorm_(c.mikveh)] = c; });
+
+  const q = String(p.q || '').trim();
+  const out = [];
+  mikvaot.forEach(function (m) {
+    if (String(m.supervised || '').trim() !== 'כן') return;
+    if (p.council && apiNorm_(m.council) !== apiNorm_(p.council)) return;
+    if (p.region && apiNorm_(m.region) !== apiNorm_(p.region)) return;
+    if (q && [m.name, m.place, m.council, m.address].join(' ').indexOf(q) < 0) return;
+    const act = String(m.activity || '').trim();
+    const c = contractors[m.id];
+    const status = act === 'בשיפוץ' ? 'בשיפוץ' : act === 'מושבת' ? 'סגור' : 'פעיל';
+    const updatedAt = m.certificateDate || m.lastInspectionDate || null;
+    if (p.since && updatedAt && updatedAt <= p.since) return;
+    out.push(apiCompact_({
+      id: m.id, name: m.name, council: m.council, place: m.place, address: m.address, region: m.region,
+      status: status, statusNote: status !== 'פעיל' && c && c.work ? c.work : null,
+      phone: m.mikvehPhone, attendantPhone: m.phone,
+      hours: apiCompact_({ summer: m.hoursSummer, winter: m.hoursWinter, erev: m.hoursErev, motzash: m.hoursMotzash }),
+      accessibility: m.accessibility, coordination: m.coordination,
+      certificate: m.certificate, certificateValid: !!(m.certificate && String(m.certificate).indexOf('אינו') < 0),
+      lastInspection: m.lastInspection, updatedAt: updatedAt,
+    }));
+  });
+  out.sort(function (a, b) { return a.name < b.name ? -1 : 1; });
+
+  const payload = { ok: true, generatedAt: new Date().toISOString(), count: out.length, mikvaot: out };
+  const cb = String(p.callback || '').replace(/[^\w.$]/g, '');
+  if (cb) {
+    return ContentService.createTextOutput(cb + '(' + JSON.stringify(payload) + ');')
+      .setMimeType(ContentService.MimeType.JAVASCRIPT);
+  }
+  return jsonResponse_(payload);
 }
