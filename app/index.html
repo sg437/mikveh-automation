@@ -155,6 +155,15 @@
   .stat .v{font-size:1.6rem;font-weight:800;color:var(--brand);line-height:1.2}
   .stat .s{font-size:.74rem;color:var(--muted)}
   .stat.bad .v{color:var(--bad)}.stat.warn .v{color:var(--warn)}.stat.ok .v{color:var(--ok)}
+  .live{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px;margin-bottom:14px;box-shadow:var(--shadow)}
+  .live .hd{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px}
+  .live .hd h3{font-size:1rem;font-weight:800;color:var(--brand)}
+  .live .hd select{padding:6px 10px;border:1px solid var(--line);border-radius:7px}
+  .live table th:first-child,.live table td:first-child{text-align:right;font-weight:700}
+  .live table td{text-align:center;font-size:1.05rem;font-weight:800;color:var(--brand)}
+  .live table th{text-align:center}
+  .live table td small{display:block;font-size:.72rem;font-weight:400;color:var(--muted)}
+  .due-bad{color:var(--bad);font-weight:700}.due-warn{color:var(--warn);font-weight:700}.due-ok{color:var(--ok);font-weight:700}
   .two{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:12px}
   .bar{display:flex;align-items:center;gap:8px;font-size:.84rem;padding:3px 0}
   .bar .lbl{min-width:110px;color:var(--muted)}
@@ -228,6 +237,7 @@
       <a href="#/" data-view="list">מקוואות <span class="n" id="navCountList"></span></a>
       <a href="#/tasks" data-view="tasks">משימות פתוחות <span class="n" id="navCountTasks"></span></a>
       <a href="#/whatsapp" data-view="whatsapp">דיווחי וואטסאפ <span class="n" id="navCountWa"></span></a>
+      <a href="#/plan" data-view="plan">תכנון עבודה <span class="n" id="navCountPlan"></span></a>
       <a href="#/dashboard" data-view="dashboard">לוח בקרה</a>
       <a href="#/forms" data-view="forms">דיווח וטפסים</a>
     </nav>
@@ -284,6 +294,43 @@
       <div class="summary"><span id="waSummary"></span></div>
     </div>
     <div id="waList"></div>
+  </section>
+
+  <!-- ===== תכנון עבודה ===== -->
+  <section class="view" id="view-plan">
+    <div class="tabs" id="planTabs">
+      <button type="button" data-tab="certs" class="on">תעודות לחידוש <span class="n" id="planCountCerts"></span></button>
+      <button type="button" data-tab="drained">מאגרים שרוקנו – ממתינים למילוי <span class="n" id="planCountDrained"></span></button>
+      <button type="button" data-tab="planned">ריקונים והחלפות מתוכננים <span class="n" id="planCountPlanned"></span></button>
+    </div>
+    <div class="pane on" data-pane="certs">
+      <div class="toolbar">
+        <div class="chips" id="certChips"></div>
+        <div class="row" style="margin-top:8px">
+          <div class="field"><label for="certRegion">איזור</label><select id="certRegion"></select></div>
+          <div class="field"><label for="certCouncil">מועצה</label><select id="certCouncil"></select></div>
+          <button class="btn" id="btnExportCerts" type="button">⬇ ייצוא לאקסל</button>
+        </div>
+        <div class="summary"><span id="certSummary"></span></div>
+      </div>
+      <div class="tbl-wrap"><table id="certTable"></table></div>
+    </div>
+    <div class="pane" data-pane="drained">
+      <div class="toolbar">
+        <div class="chips" id="drainChips"></div>
+        <div class="row" style="margin-top:8px">
+          <div class="field"><label for="drainRegion">איזור</label><select id="drainRegion"></select></div>
+          <button class="btn" id="btnExportDrained" type="button">⬇ ייצוא לאקסל</button>
+        </div>
+        <div class="summary"><span id="drainSummary"></span></div>
+      </div>
+      <div class="tbl-wrap"><table id="drainTable"></table></div>
+    </div>
+    <div class="pane" data-pane="planned">
+      <div class="note-box">משימות מלשונית "משימות לריקון והחלפת מי גשמים" בגיליון: ריקוני מאגר והחלפות אוצר שסומנו לביצוע, לפי עדיפות.</div>
+      <div class="toolbar"><div class="row"><div class="field"><label for="plannedType">סוג</label><select id="plannedType"></select></div><div class="field"><label for="plannedRegion">איזור</label><select id="plannedRegion"></select></div><button class="btn" id="btnExportPlanned" type="button">⬇ ייצוא לאקסל</button></div><div class="summary"><span id="plannedSummary"></span></div></div>
+      <div class="tbl-wrap"><table id="plannedTable"></table></div>
+    </div>
   </section>
 
   <!-- ===== לוח בקרה ===== -->

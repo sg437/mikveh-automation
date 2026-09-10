@@ -509,13 +509,15 @@ function processRow_(sheet, rowNum, row, notReady) {
 
     const result = analyzeWithGemini_(text, blob);
     const logRowNum = appendToReportLog_(row, result, archiveLink);
+    // רישום אוטומטי של הפעולה בתיק המקווה (פעיל רק כש-WA_AUTO_ACTIONS=1)
+    const actionNote = recordWhatsappAction_(row, result);
 
     if (hasMedia && archiveLink) {
       const smartLink = fileToSmartArchive_(archiveLink, result.mikveh_name, result.settlement);
       appendMediaLink_(logRowNum, smartLink);
     }
 
-    markDone_(sheet, rowNum, buildDoneNote_(result));
+    markDone_(sheet, rowNum, buildDoneNote_(result) + (actionNote ? ' | ' + actionNote : ''));
     return true;
   }
 
@@ -603,6 +605,9 @@ function analyzeWithGemini_(text, blob) {
           defect_type: { type: 'STRING' },
           summary: { type: 'STRING' },
           transcript: { type: 'STRING' },
+          action_type: { type: 'STRING' },
+          otzar: { type: 'STRING' },
+          done_date: { type: 'STRING' },
         },
         required: ['is_report', 'summary'],
       },
@@ -655,6 +660,10 @@ function normalizeGeminiResult_(parsed, list) {
   parsed.summary = String(parsed.summary || '').trim();
   parsed.transcript = String(parsed.transcript || '').trim() || null;
   parsed.ambiguous_city = false;
+  // פעולה שבוצעה (לרישום אוטומטי בתיק המקווה – ראה WhatsappActions.js)
+  parsed.action_type = String(parsed.action_type || '').trim();
+  parsed.otzar = String(parsed.otzar || '').trim();
+  parsed.done_date = /^\d{4}-\d{2}-\d{2}$/.test(String(parsed.done_date || '').trim()) ? String(parsed.done_date).trim() : '';
 
   if (parsed.mikveh_name) {
     let exact = null;
@@ -703,7 +712,10 @@ function buildPrompt_(text, names, hasBlob) {
     '- settlement: רק אם אין mikveh_name — שם העיר/היישוב בכתיב תקני. אחרת ריק.',
     '- defect_type: אחד מאלה: תחזוקה / ליקוי / בדיקה שוטפת / אישור מעבדה / אחר.',
     '- summary: תקציר של משפט אחד בעברית.',
-    '- transcript: תמלול מלא, רק אם צורף אודיו.'
+    '- transcript: תמלול מלא, רק אם צורף אודיו.',
+    '- action_type: הפעולה שהדיווח אומר שבוצעה בפועל, אחת מאלה בלבד: ריקון מאגר / החלפת אוצר / מילוי אוצר / חידוש תעודה / תיקון / ביקור / אחר. אם זה רק תכנון, בקשה או שאלה — "אחר".',
+    '- otzar: רק אם action_type הוא החלפת אוצר או מילוי אוצר: זריעה / השקה / חב"ד. אחרת ריק.',
+    '- done_date: תאריך הביצוע בפורמט YYYY-MM-DD רק אם צוין במפורש בדיווח (למשל "אתמול" ביחס להיום ' + Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'yyyy-MM-dd') + '). אחרת ריק.'
   );
   return lines.join('\n');
 }
