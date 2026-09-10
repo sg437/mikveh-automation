@@ -54,7 +54,7 @@
     body.innerHTML = '<form id="editForm" class="rform" novalidate>' +
       (m ? '' : '<div class="fgrid"><div class="ff wide"><label for="e_name">שם המקווה <span class="req">*</span></label><input id="e_name" name="name" type="text" required placeholder="למשל: אשדוד - רובע ז"></div></div>') +
       GROUPS.map((g, i) => '<details class="fsec"' + (i === 0 ? ' open' : '') + '><summary>' + esc(g.title) + '</summary><div class="fgrid">' + g.fields.map((f) => field(f, m ? m[f.k] : '')).join('') + '</div></details>').join('') +
-      (m ? '<div class="note-box" style="margin-top:10px">תוקף התעודה, ביקור אחרון ותאריכי ההחלפות מחושבים אוטומטית מהדיווחים ולא נערכים כאן.</div>' : '') +
+      (m ? '<div class="note-box" style="margin-top:10px">תוקף התעודה, ביקור אחרון ותאריכי ההחלפות מחושבים אוטומטית מהדיווחים ולא נערכים כאן. פרטי הקבלן והפניות אליו נמצאים בלשונית "קבלן" בכרטיס. שינוי "פעילות" ל"בשיפוץ" או "מושבת" מתעדכן גם באתר.</div>' : '') +
       '<div class="factions"><button class="btn primary" type="submit" id="editSubmit">' + (m ? 'שמירת השינויים' : 'הוספת המקווה') + '</button><button class="btn" type="button" id="editCancel">ביטול</button><span class="fmsg" id="editMsg"></span></div></form>';
     root.hidden = false;
     K.$('#editCancel').addEventListener('click', () => { root.hidden = true; });

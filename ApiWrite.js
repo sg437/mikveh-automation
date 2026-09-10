@@ -22,6 +22,10 @@ const WRITE = {
   MESSAGES_HEADERS: ['מזהה', 'זמן', 'מקווה', 'כותב', 'טלפון', 'טקסט', 'תגובה ל', 'מקור', 'קבוצה'],
   GROUPS_SHEET: 'קבוצות דיון',
   GROUPS_HEADERS: ['מזהה', 'שם', 'נושא', 'חברים (מזהי משתמש)', 'פתוחה לכולם', 'נוצרה', 'נוצרה ע"י', 'פעילה'],
+  CONTRACTORS_SHEET: 'קבלנים',
+  CONTRACTORS_HEADERS: ['מקווה', 'שם הקבלן', 'אימייל', 'טלפון', 'סוג העבודה', 'סטטוס', 'עודכן', 'עודכן ע"י'],
+  CONTRACTOR_MSGS_SHEET: 'פניות לקבלן',
+  CONTRACTOR_MSGS_HEADERS: ['מזהה', 'זמן', 'מקווה', 'קבלן', 'אל (אימייל)', 'אל (טלפון)', 'נושא', 'הודעה', 'ערוץ', 'נשלח ע"י', 'סטטוס'],
   REACTIONS_SHEET: 'תגובות',
   REACTIONS_HEADERS: ['מזהה הודעה', 'משתמש', 'שם', 'אימוג\'י', 'זמן'],
   WORK_SHEET: 'שיבוצים',
@@ -77,6 +81,8 @@ function apiWritePost_(e, action) {
       if (action === 'addGroup') return jsonResponse_(addGroup_(ss, data, user));
       if (action === 'updateGroup') return jsonResponse_(updateGroup_(ss, data, user));
       if (action === 'react') return jsonResponse_(react_(ss, data, user));
+      if (action === 'saveContractor') return jsonResponse_(saveContractor_(ss, data, user));
+      if (action === 'notifyContractor') return jsonResponse_(notifyContractor_(ss, data, user));
     } finally {
       lock.releaseLock();
     }
@@ -509,4 +515,111 @@ function apiReactions_(ss) {
   const out = [];
   values.forEach(function (v) { if (v[0]) out.push({ messageId: String(v[0]), userId: String(v[1]), name: apiClean_(v[2]) || '', emoji: String(v[3]) }); });
   return out;
+}
+
+// ==================== קבלנים ופניות אליהם ====================
+
+function contractorsSheet_(ss) {
+  let sh = ss.getSheetByName(WRITE.CONTRACTORS_SHEET);
+  if (!sh) {
+    sh = ss.insertSheet(WRITE.CONTRACTORS_SHEET);
+    sh.appendRow(WRITE.CONTRACTORS_HEADERS);
+    sh.setFrozenRows(1);
+    sh.setRightToLeft(true);
+  }
+  return sh;
+}
+
+function contractorMsgsSheet_(ss) {
+  let sh = ss.getSheetByName(WRITE.CONTRACTOR_MSGS_SHEET);
+  if (!sh) {
+    sh = ss.insertSheet(WRITE.CONTRACTOR_MSGS_SHEET);
+    sh.appendRow(WRITE.CONTRACTOR_MSGS_HEADERS);
+    sh.setFrozenRows(1);
+    sh.setRightToLeft(true);
+  }
+  return sh;
+}
+
+function apiContractors_(ss) {
+  const sh = ss.getSheetByName(WRITE.CONTRACTORS_SHEET);
+  if (!sh || sh.getLastRow() < 2) return [];
+  const values = sh.getRange(2, 1, sh.getLastRow() - 1, WRITE.CONTRACTORS_HEADERS.length).getValues();
+  const out = [];
+  values.forEach(function (v) {
+    if (!v[0]) return;
+    out.push(apiCompact_({ mikveh: apiClean_(v[0]), mikvehId: apiNorm_(v[0]), name: apiClean_(v[1]), email: apiClean_(v[2]), phone: apiClean_(v[3]),
+      work: apiClean_(v[4]), status: apiClean_(v[5]) || 'פעיל', ts: apiIso_(v[6]), by: apiClean_(v[7]) }));
+  });
+  return out;
+}
+
+function apiContractorMsgs_(ss) {
+  const sh = ss.getSheetByName(WRITE.CONTRACTOR_MSGS_SHEET);
+  if (!sh || sh.getLastRow() < 2) return [];
+  const values = sh.getRange(2, 1, sh.getLastRow() - 1, WRITE.CONTRACTOR_MSGS_HEADERS.length).getValues();
+  const out = [];
+  values.forEach(function (v) {
+    if (!v[0]) return;
+    out.push(apiCompact_({ id: String(v[0]), ts: apiIso_(v[1]), mikveh: apiClean_(v[2]), mikvehId: apiNorm_(v[2]), contractor: apiClean_(v[3]),
+      email: apiClean_(v[4]), phone: apiClean_(v[5]), subject: apiClean_(v[6]), text: apiClean_(v[7]), channel: apiClean_(v[8]), by: apiClean_(v[9]), status: apiClean_(v[10]) }));
+  });
+  return out;
+}
+
+/** שמירת פרטי הקבלן של מקווה (שורה אחת לכל מקווה). */
+function saveContractor_(ss, d, user) {
+  const mikveh = canonicalMikveh_(ss, d.mikveh);
+  if (!mikveh) return { error: 'המקווה לא נמצא' };
+  const sh = contractorsSheet_(ss);
+  const last = sh.getLastRow();
+  let rowNum = -1;
+  if (last >= 2) {
+    const names = sh.getRange(2, 1, last - 1, 1).getValues();
+    for (let i = 0; i < names.length; i++) { if (apiNorm_(names[i][0]) === apiNorm_(mikveh)) { rowNum = i + 2; break; } }
+  }
+  const row = [mikveh, txt_(d.name, 80), txt_(d.email, 120), txt_(d.phone, 40), txt_(d.work, 200), txt_(d.status, 30) || 'פעיל', new Date(), user.name];
+  if (rowNum < 0) sh.appendRow(row); else sh.getRange(rowNum, 1, 1, row.length).setValues([row]);
+  return { ok: true, record: apiCompact_({ mikveh: mikveh, mikvehId: apiNorm_(mikveh), name: row[1], email: row[2], phone: row[3], work: row[4], status: row[5], ts: apiIsoDate_(row[6]), by: user.name }) };
+}
+
+/**
+ * שליחת הודעה לקבלן במייל (MailApp) ו/או החזרת קישור וואטסאפ.
+ * הפנייה נרשמת בלשונית "פניות לקבלן" ובדיון של המקווה.
+ */
+function notifyContractor_(ss, d, user) {
+  const mikveh = canonicalMikveh_(ss, d.mikveh);
+  if (!mikveh) return { error: 'המקווה לא נמצא' };
+  const text = txt_(d.text);
+  if (!text) return { error: 'ההודעה ריקה' };
+  const c = apiContractors_(ss).filter(function (x) { return apiNorm_(x.mikveh) === apiNorm_(mikveh); })[0] || {};
+  const email = txt_(d.email, 120) || c.email || '';
+  const phone = txt_(d.phone, 40) || c.phone || '';
+  const subject = txt_(d.subject, 150) || ('מקווה ' + mikveh + ' – הערות מהפיקוח');
+  const channel = d.channel === 'whatsapp' ? 'whatsapp' : 'email';
+  let status = 'נרשם';
+
+  if (channel === 'email') {
+    if (!email) return { error: 'אין כתובת מייל לקבלן. אפשר למלא אותה בכרטיס או לשלוח בוואטסאפ.' };
+    try {
+      const body = 'בס"ד\n\nשלום' + (c.name ? ' ' + c.name : '') + ',\n\n' + text +
+        '\n\nמקווה: ' + mikveh + (c.work ? '\nעבודה: ' + c.work : '') +
+        '\n\nבברכה,\n' + user.name + '\nהמרכז הארצי למען טהרת המשפחה';
+      MailApp.sendEmail({ to: email, subject: subject, body: body, name: 'פיקוח כשרות המקוואות', replyTo: user.email || undefined });
+      status = 'נשלח במייל';
+    } catch (err) {
+      status = 'שגיאת שליחה: ' + String(err).slice(0, 80);
+    }
+  } else {
+    if (!phone) return { error: 'אין טלפון לקבלן. אפשר למלא אותו בכרטיס או לשלוח במייל.' };
+    status = 'נשלח בוואטסאפ';
+  }
+
+  const id = Utilities.getUuid();
+  const now = new Date();
+  contractorMsgsSheet_(ss).appendRow([id, now, mikveh, c.name || '', email, phone, subject, text, channel === 'email' ? 'מייל' : 'וואטסאפ', user.name, status]);
+  const msg = writeMessage_(ss, { mikveh: mikveh, text: '📨 ' + user.name + ' שלח/ה לקבלן' + (c.name ? ' (' + c.name + ')' : '') + ' ' + (channel === 'email' ? 'מייל' : 'הודעת וואטסאפ') + ': ' + text.slice(0, 200), _system: true }, user);
+  if (msg.record) msg.record.source = 'system';
+  const wa = phone ? 'https://wa.me/' + phoneToChatId_(phone).replace('@c.us', '') + '?text=' + encodeURIComponent(subject + '\n\n' + text) : '';
+  return { ok: true, record: { id: id, ts: apiIsoDate_(now), mikveh: mikveh, mikvehId: apiNorm_(mikveh), contractor: c.name || '', email: email, phone: phone, subject: subject, text: text, channel: channel === 'email' ? 'מייל' : 'וואטסאפ', by: user.name, status: status }, waLink: wa, message: msg.record || null };
 }

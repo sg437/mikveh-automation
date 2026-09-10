@@ -56,20 +56,36 @@
     return '<div class="reacts">' + chips + '<button type="button" class="react add" data-add="' + esc(m.id) + '" title="הוסף תגובה">🙂+</button></div>';
   }
 
+  function initials(n) { return String(n || '?').trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join(''); }
+  function colorOf(n) { let h = 0; String(n || '').split('').forEach((c) => { h = (h * 31 + c.charCodeAt(0)) % 360; }); return 'hsl(' + h + ' 45% 42%)'; }
+  function dayLabel(ts) {
+    const K = MK(), d = K.parseISO(ts);
+    if (!d) return '';
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const day = new Date(d); day.setHours(0, 0, 0, 0);
+    const diff = Math.round((today - day) / 86400000);
+    if (diff === 0) return 'היום';
+    if (diff === 1) return 'אתמול';
+    return K.hebOf(ts) + ' · ' + K.fmtDate(ts);
+  }
+
   function bubble(m, showChannel) {
     const K = MK();
     const me = K.getUser().name && m.author === K.getUser().name;
     const q = m.replyTo ? all().find((x) => x.id === m.replyTo) : null;
     if (m.source === 'system') return '<div class="msg sys" data-id="' + esc(m.id) + '"><div class="mb">' + esc(m.text || '') + '</div><div class="mh"><span class="mt">' + esc(K.hebOf(m.ts)) + ' · ' + esc(K.fmtDate(m.ts)) + '</span></div></div>';
-    return '<div class="msg ' + (me ? 'me' : '') + '" data-id="' + esc(m.id) + '">' +
-      '<div class="mh"><b>' + esc(m.author || '') + '</b>' + (m.pending ? ' ' + K.badge('ממתין לשליחה', 'warn') : '') +
-      (showChannel && chOf(m) ? ' · <a href="#/talk/' + encodeURIComponent(chOf(m)) + '">' + esc(name(chOf(m))) + '</a>' : '') +
-      '<span class="mt">' + esc(K.hebOf(m.ts)) + ' · ' + esc(K.fmtDate(m.ts)) + (K.parseISO(m.ts) ? ' ' + K.parseISO(m.ts).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' }) : '') + '</span></div>' +
-      (q ? '<div class="mq"><b>' + esc(q.author || '') + ':</b> ' + esc((q.text || '').slice(0, 120)) + '</div>' : '') +
+    const time = K.parseISO(m.ts) ? K.parseISO(m.ts).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' }) : '';
+    return '<div class="row ' + (me ? 'me' : '') + '">' +
+      (me ? '' : '<span class="av" style="background:' + colorOf(m.author) + '">' + esc(initials(m.author)) + '</span>') +
+      '<div class="msg ' + (me ? 'me' : '') + '" data-id="' + esc(m.id) + '">' +
+      (me ? '' : '<div class="mh"><b style="color:' + colorOf(m.author) + '">' + esc(m.author || '') + '</b>' +
+        (showChannel && chOf(m) ? ' · <a href="#/talk/' + encodeURIComponent(chOf(m)) + '">' + esc(name(chOf(m))) + '</a>' : '') + '</div>') +
+      (q ? '<button type="button" class="mq" data-goto="' + esc(q.id) + '"><b>' + esc(q.author || '') + '</b>' + esc((q.text || '').slice(0, 120)) + '</button>' : '') +
       '<div class="mb">' + esc(m.text || '').replace(/\n/g, '<br>') + '</div>' +
       (window.MikvehMedia ? MikvehMedia.thumbs(MikvehMedia.forRef('message', m.id)) : '') +
-      reactionBar(m) +
-      '<div class="ma"><button type="button" class="lnk" data-reply="' + esc(m.id) + '">השב</button></div></div>';
+      '<div class="mfoot"><span class="mt">' + esc(time) + '</span>' + (me ? '<span class="tick">' + (m.pending ? '🕘' : '✓✓') + '</span>' : '') +
+      '<button type="button" class="lnk" data-reply="' + esc(m.id) + '">↩ השב</button></div>' +
+      reactionBar(m) + '</div></div>';
   }
 
   function composer(ch) {
@@ -85,7 +101,14 @@
     const K = MK();
     const list = byChannel(ch);
     const notice = K.S.data.source === 'static' ? '<div class="note-box">אין חיבור לגיליון כרגע: הודעות שתכתוב יישמרו במכשיר ויישלחו אוטומטית כשיהיה חיבור.</div>' : '';
-    return notice + '<div class="thread">' + (list.length ? list.map((m) => bubble(m, showChannel)).join('') : '<div class="empty">עדיין אין הודעות. התחילו את הדיון.</div>') + '</div>' + composer(ch);
+    let day = '';
+    const body = list.map((m) => {
+      const d = dayLabel(m.ts);
+      const sep = d && d !== day ? '<div class="daysep"><span>' + esc(d) + '</span></div>' : '';
+      day = d || day;
+      return sep + bubble(m, showChannel);
+    }).join('');
+    return notice + '<div class="thread">' + (list.length ? body : '<div class="empty">עדיין אין הודעות. התחילו את הדיון.</div>') + '</div>' + composer(ch);
   }
 
   function bind(root, ch, onSent) {
@@ -114,8 +137,16 @@
       box.querySelectorAll('button').forEach((eb) => eb.addEventListener('click', () => { box.remove(); react(b.dataset.add, eb.textContent, onSent); }));
       setTimeout(() => document.addEventListener('click', () => box.remove(), { once: true }), 0);
     }));
+    root.querySelectorAll('[data-goto]').forEach((b) => b.addEventListener('click', () => {
+      const el = root.querySelector('.msg[data-id="' + b.dataset.goto + '"]');
+      if (el) { el.scrollIntoView({ block: 'center', behavior: 'smooth' }); el.classList.add('flash'); setTimeout(() => el.classList.remove('flash'), 1200); }
+    }));
     const form = root.querySelector('.composer');
     if (!form) return;
+    const ta0 = form.querySelector('textarea');
+    if (ta0) ta0.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Enter' && !ev.shiftKey && !ev.ctrlKey) { ev.preventDefault(); form.requestSubmit ? form.requestSubmit() : form.querySelector('button[type=submit]').click(); }
+    });
     const pickBox = form.querySelector('.mpick');
     const pics = window.MikvehMedia && pickBox ? MikvehMedia.picker(pickBox.id).bind(form) : null;
     form.addEventListener('submit', (e) => {

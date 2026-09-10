@@ -466,7 +466,8 @@
     const tabs = [
       ['details', 'פרטים'], ['otzarot', 'אוצרות ומאגר'], ['history', 'היסטוריית פעולות', acts.length],
       ['inspections', 'דוחות פיקוח', ins.length], ['tasks', 'משימות', tasks.length + plugs.length + (window.MikvehWork ? MikvehWork.forMikveh(m.id).length : 0)],
-      ['talk', 'דיון', (S.data.messages || []).filter((x) => x.mikvehId === m.id).length], ['photos', 'מדיה', window.MikvehMedia ? MikvehMedia.photosCount(m) : 0], ['whatsapp', 'דיווחי וואטסאפ', (S.wa[m.id] || []).length],
+      ['talk', 'דיון', (S.data.messages || []).filter((x) => x.mikvehId === m.id).length], ['photos', 'מדיה', window.MikvehMedia ? MikvehMedia.photosCount(m) : 0],
+      ['contractor', 'קבלן', window.MikvehContractor ? MikvehContractor.count(m) : 0], ['whatsapp', 'דיווחי וואטסאפ', (S.wa[m.id] || []).length],
     ];
     const tabBar = '<div class="tabs">' + tabs.map(([k, t, n]) =>
       '<button type="button" data-tab="' + k + '" class="' + (k === tab ? 'on' : '') + '">' + t + (n != null ? '<span class="n">' + n + '</span>' : '') + '</button>').join('') + '</div>';
@@ -479,6 +480,7 @@
       tasks: (window.MikvehWork ? MikvehWork.renderCardPane(m) : '') + renderCardTasks(tasks, plugs),
       talk: window.MikvehTalk ? MikvehTalk.renderPane(m) : '',
       photos: window.MikvehMedia ? MikvehMedia.photosPane(m) : '',
+      contractor: window.MikvehContractor ? MikvehContractor.pane(m) : '',
       whatsapp: renderWhatsapp(S.wa[m.id] || [], m),
     };
     root.innerHTML = head + tabBar + Object.keys(panes).map((k) => '<div class="pane ' + (k === tab ? 'on' : '') + '" data-pane="' + k + '">' + panes[k] + '</div>').join('');
@@ -492,6 +494,7 @@
     $('#cardEdit').addEventListener('click', () => { if (window.MikvehEdit) MikvehEdit.open(m); });
     if (window.MikvehTalk) MikvehTalk.bindPane(root, m);
     if (window.MikvehWork) MikvehWork.bindCardPane(root, m);
+    if (window.MikvehContractor) MikvehContractor.bind(root, m);
     root.querySelectorAll('[data-export]').forEach((b) => b.addEventListener('click', () => {
       if (b.dataset.export === 'history') exportActions(acts, m.name);
       else exportInspections(ins, m.name);
@@ -1156,6 +1159,7 @@
     }
     data.messages = data.messages || []; data.work = data.work || []; data.media = data.media || []; data.users = data.users || [];
     data.groups = data.groups || []; data.reactions = data.reactions || []; data.perms = data.perms || null;
+    data.contractors = data.contractors || []; data.contractorMsgs = data.contractorMsgs || [];
     $('#navCountTalk').textContent = data.messages.length;
     $('#navCountWork').textContent = data.work.filter((w) => w.status !== 'done').length;
     initList();
