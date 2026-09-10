@@ -163,13 +163,15 @@
     MK.DataSource.post(action, data).then((res) => {
       msg.textContent = 'נשמר בתיק המקווה ✓'; msg.className = 'fmsg ok';
       const pics = root._pics ? root._pics.get() : [];
-      if (pics.length && res.record && window.MikvehMedia) {
+      if (res.queued) { msg.textContent = 'אין חיבור כרגע – נשמר במכשיר ויישלח אוטומטית ✓'; if (pics.length) MK.toast('התמונות יצורפו רק בדיווח עם חיבור'); }
+      if (action === 'addInspection' && res.record && res.queued) MK.S.data.inspections.push(Object.assign({ sections: [], urgent: 0, needed: 0, hebDate: '' }, res.record));
+      if (pics.length && res.record && !res.queued && window.MikvehMedia) {
         MikvehMedia.upload(pics, { mikveh: m.name, context: action === 'addInspection' ? 'inspection' : 'action', refId: res.record.ts })
           .then(() => { MK.toast('התמונות הועלו'); MK.route(); }).catch((err) => MK.toast('התמונות לא הועלו: ' + err.message));
       }
       if (action === 'addAction' && res.record) MK.addAction(res.record);
       if (action === 'addInspection' && res.record) MK.toast('דו"ח הפיקוח נשמר. הדוח המלא יופיע בכרטיס לאחר רענון הנתונים.');
-      MK.toast('נרשם בתיק ' + m.name + ': ' + (key === 'inspection' ? 'דו"ח פיקוח' : def.action));
+      MK.toast((res.queued ? 'נשמר במכשיר – ' : 'נרשם בתיק ') + m.name + ': ' + (key === 'inspection' ? 'דו"ח פיקוח' : def.action));
       if (window.MikvehWork) MikvehWork.afterReport(m.id);
       setTimeout(() => { MK.closeReport(); location.hash = '#/m/' + encodeURIComponent(m.id) + (key === 'inspection' ? '/inspections' : '/history'); MK.route(); }, 900);
     }).catch((err) => {

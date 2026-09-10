@@ -26,7 +26,7 @@
     const q = m.replyTo ? all().find((x) => x.id === m.replyTo) : null;
     if (m.source === 'system') return '<div class="msg sys" data-id="' + esc(m.id) + '"><div class="mb">' + esc(m.text || '') + '</div><div class="mh"><span class="mt">' + esc(K.hebOf(m.ts)) + ' · ' + esc(K.fmtDate(m.ts)) + '</span></div></div>';
     return '<div class="msg ' + (me ? 'me' : '') + '" data-id="' + esc(m.id) + '">' +
-      '<div class="mh"><b>' + esc(m.author || '') + '</b>' + (showChannel && m.mikvehId ? ' · <a href="#/talk/' + encodeURIComponent(m.mikvehId) + '">' + esc(name(m.mikvehId)) + '</a>' : '') +
+      '<div class="mh"><b>' + esc(m.author || '') + '</b>' + (m.pending ? ' ' + K.badge('ממתין לשליחה', 'warn') : '') + (showChannel && m.mikvehId ? ' · <a href="#/talk/' + encodeURIComponent(m.mikvehId) + '">' + esc(name(m.mikvehId)) + '</a>' : '') +
       '<span class="mt">' + esc(K.hebOf(m.ts)) + ' · ' + esc(K.fmtDate(m.ts)) + (K.parseISO(m.ts) ? ' ' + K.parseISO(m.ts).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' }) : '') + '</span></div>' +
       (q ? '<div class="mq"><b>' + esc(q.author || '') + ':</b> ' + esc((q.text || '').slice(0, 120)) + '</div>' : '') +
       '<div class="mb">' + esc(m.text || '').replace(/\n/g, '<br>') + '</div>' +
@@ -44,7 +44,7 @@
   function threadHtml(ch, showChannel) {
     const K = MK();
     const list = byChannel(ch);
-    const notice = K.S.data.source === 'static' ? '<div class="note-box">הדיונים נשמרים בגיליון ודורשים חיבור חי (config.js). כרגע מוצג עותק סטטי.</div>' : '';
+    const notice = K.S.data.source === 'static' ? '<div class="note-box">אין חיבור לגיליון כרגע: הודעות שתכתוב יישמרו במכשיר ויישלחו אוטומטית כשיהיה חיבור.</div>' : '';
     return notice + '<div class="thread">' + (list.length ? list.map((m) => bubble(m, showChannel)).join('') : '<div class="empty">עדיין אין הודעות. התחילו את הדיון.</div>') + '</div>' + composer(ch);
   }
 

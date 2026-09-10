@@ -34,11 +34,16 @@
         .then(([d, cached]) => { if (d.error) throw new Error(d.error); d.source = cached ? 'cached' : 'live'; return d; })
         .catch((err) => { console.warn('טעינה מהגיליון נכשלה, עובדים מהעותק המקומי:', err); return fallback(err); });
     },
-    /** כתיבה לגיליון דרך ApiWrite.js. גוף text/plain כדי להימנע מ-preflight. */
+    /** כתיבה לגיליון דרך ApiWrite.js. בלי חיבור – דיווחים והודעות נשמרים במכשיר ונשלחים אחר כך. */
     post: function (action, data) {
       const token = window.MikvehAuth ? MikvehAuth.token() : '';
+      if (!this.url(action) || !navigator.onLine) {
+        if (Outbox.CAN_QUEUE.indexOf(action) >= 0) return Promise.resolve(Outbox.add(action, data));
+        return Promise.reject(new Error(!this.url(action) ? 'הפעולה הזו דורשת חיבור לגיליון (עדיין לא הוגדר בקובץ config.js)' : 'אין חיבור לאינטרנט. נסה שוב כשיהיה חיבור.'));
+      }
       return this.postRaw(action, data, token).catch((err) => {
         if (err.code === 'auth' && window.MikvehAuth) MikvehAuth.onAuthError();
+        if (err.message === 'Failed to fetch' && Outbox.CAN_QUEUE.indexOf(action) >= 0) return Outbox.add(action, data);
         throw err;
       });
     },
@@ -51,6 +56,52 @@
         .then((d) => { if (d.error) { const e = new Error(d.error); e.code = d.code; throw e; } return d; });
     }
   };
+
+  // ============================================================ תור שליחה (בלי חיבור)
+  const Outbox = {
+    KEY: 'mikveh.outbox',
+    CAN_QUEUE: ['addAction', 'addInspection', 'addMessage'],
+    list: function () { try { return JSON.parse(localStorage.getItem(this.KEY) || '[]'); } catch (e) { return []; } },
+    save: function (l) { try { localStorage.setItem(this.KEY, JSON.stringify(l)); } catch (e) { /* ignore */ } renderOutbox(); },
+    /** שומר את הפעולה במכשיר ומחזיר רשומה מקומית כדי שהכרטיס יתעדכן מיד */
+    add: function (action, data) {
+      const u = getUser();
+      const now = new Date();
+      const iso = (d) => d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2) + 'T' + ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2) + ':' + ('0' + d.getSeconds()).slice(-2);
+      const id = 'local-' + now.getTime() + '-' + Math.random().toString(36).slice(2, 7);
+      let record;
+      if (action === 'addMessage') {
+        const m = data.mikveh ? findByName(data.mikveh) : null;
+        record = { id, ts: iso(now), mikveh: data.mikveh || null, mikvehId: m ? m.id : null, author: u.name || 'אני', phone: u.phone || '', text: data.text, replyTo: data.replyTo || null, source: 'app', pending: true };
+      } else {
+        const m = findByName(data.mikveh);
+        const when = data.date ? new Date(data.date + 'T12:00:00') : now;
+        record = Object.assign({}, data, { ts: iso(when), mikveh: data.mikveh, mikvehId: m ? m.id : null, rabbi: data.rabbi || u.name || '', pending: true });
+        if (action === 'addInspection') record = { ts: iso(when), mikveh: data.mikveh, mikvehId: m ? m.id : null, rabbi: data.rabbi || u.name || '', pending: true };
+        ['drained', 'roofDone', 'treated'].forEach((k) => { if (Array.isArray(record[k])) record[k] = record[k].join(', '); });
+      }
+      const l = this.list(); l.push({ id, action, data, ts: iso(now), user: u });
+      this.save(l);
+      return { ok: true, queued: true, record };
+    },
+    /** שולח את מה שממתין (כשיש חיבור) */
+    flush: function () {
+      const l = this.list();
+      if (!l.length || !DataSource.url('data') || !navigator.onLine) return Promise.resolve(0);
+      let p = Promise.resolve(), sent = 0;
+      l.forEach((item) => {
+        p = p.then(() => DataSource.postRaw(item.action, item.data, window.MikvehAuth ? MikvehAuth.token() : '').then(() => { sent++; this.save(this.list().filter((x) => x.id !== item.id)); }).catch((err) => { if (err.code === 'auth') throw err; }));
+      });
+      return p.then(() => { if (sent) toast(sent + ' דיווחים שהמתינו במכשיר נשלחו לגיליון'); return sent; }).catch(() => sent);
+    },
+  };
+  function renderOutbox() {
+    const l = Outbox.list();
+    const b = $('#outboxBadge');
+    if (b) { b.hidden = !l.length; b.textContent = l.length ? '⏳ ' + l.length + ' ממתינים לשליחה' : ''; }
+    const box = $('#outboxList');
+    if (box) box.innerHTML = l.length ? '<div class="panel"><h3>ממתינים לשליחה מהמכשיר הזה (' + l.length + ')</h3><ul class="feed">' + l.map((it) => '<li><span class="fi">⏳</span><div class="ft"><b>' + esc(it.data.mikveh || 'דיון כללי') + '</b> · ' + esc(it.action === 'addMessage' ? 'הודעה: ' + (it.data.text || '').slice(0, 60) : it.action === 'addInspection' ? 'דו"ח פיקוח' : it.data.action) + '<small>' + esc(hebOf(it.ts)) + '</small></div></li>').join('') + '</ul><div class="note-box">יישלחו אוטומטית כשהאפליקציה תהיה מחוברת לגיליון.</div></div>' : '';
+  }
 
   // ============================================================ המשתמש במכשיר הזה
   function getUser() {
@@ -107,15 +158,16 @@
     buildIndexes(S.data);
   }
 
+  // כל הדיווחים נעשים בתוך המערכת (forms.js). אין הפניה לטפסים חיצוניים.
   const FORMS = [
-    { key: 'inspection', icon: '📋', title: 'דו"ח פיקוח', desc: 'ביקורת הלכתית מלאה: גג, מאגר, אוצרות, בור טבילה, טכני', url: 'https://goo.gl/forms/u96Zky0MJzGuswGC3' },
-    { key: 'reservoir', icon: '🌧', title: 'ריקון מאגר', desc: 'ריקון והחלפת מי גשמים במאגר', url: 'https://goo.gl/forms/oS2LeXLB00B7rnUs2' },
-    { key: 'zeria', icon: '🔄', title: 'החלפת אוצר זריעה', desc: 'ריקון, איטום ומילוי אוצר הזריעה', url: 'https://goo.gl/forms/ZrVkRw29lhalbuPJ2' },
-    { key: 'hashaka', icon: '🔁', title: 'החלפת אוצר השקה', desc: 'ריקון, איטום ומילוי אוצר ההשקה', url: 'https://goo.gl/forms/NUr4QBhyq6zonxu63' },
-    { key: 'repair', icon: '🛠', title: 'טיפול / תיקון', desc: 'טיפול בבור הטבילה, באוצרות, במאגר או בגג', url: 'https://goo.gl/forms/Ykm1PFoyCLnCf2U73' },
-    { key: 'cert', icon: '📜', title: 'חידוש תעודה', desc: 'תעודת כשרות חדשה עם תוקף לשנה', url: 'https://goo.gl/forms/ZrVkRw29lhalbuPJ2' },
-    { key: 'visit', icon: '👣', title: 'ביקור כשרות', desc: 'ביקור שוטף ללא דוח מלא', url: 'https://goo.gl/forms/u96Zky0MJzGuswGC3' },
-    { key: 'plug', icon: '🔌', title: 'פקק על הגג', desc: 'הנחת פקק לפתיחת המאגר לגשם', url: 'https://goo.gl/forms/oS2LeXLB00B7rnUs2' },
+    { key: 'inspection', icon: '📋', title: 'דו"ח פיקוח', desc: 'ביקורת הלכתית מלאה: גג, מאגר, אוצרות, בור טבילה, טכני' },
+    { key: 'reservoir', icon: '🌧', title: 'ריקון מאגר', desc: 'ריקון והחלפת מי גשמים במאגר' },
+    { key: 'zeria', icon: '🔄', title: 'החלפת אוצר זריעה', desc: 'ריקון, איטום ומילוי אוצר הזריעה' },
+    { key: 'hashaka', icon: '🔁', title: 'החלפת אוצר השקה', desc: 'ריקון, איטום ומילוי אוצר ההשקה' },
+    { key: 'repair', icon: '🛠', title: 'טיפול / תיקון', desc: 'טיפול בבור הטבילה, באוצרות, במאגר או בגג' },
+    { key: 'cert', icon: '📜', title: 'חידוש תעודה', desc: 'תעודת כשרות חדשה עם תוקף לשנה' },
+    { key: 'visit', icon: '👣', title: 'ביקור כשרות', desc: 'ביקור שוטף ללא דוח מלא' },
+    { key: 'plug', icon: '🔌', title: 'פקק על הגג', desc: 'הנחת פקק לפתיחת המאגר לגשם' },
   ];
 
   // ============================================================ עזרים
@@ -512,6 +564,7 @@
       if (a.reservoirSealed) bits.push(badge('איטום מאגר: ' + a.reservoirSealed));
       if (a.liters) bits.push(badge(a.liters + ' ליטר'));
       const notes = [a.note, a.note2].filter(Boolean).join(' · ');
+      if (a.pending) bits.push(badge('ממתין לשליחה', 'warn'));
       const pics = window.MikvehMedia ? MikvehMedia.thumbs(MikvehMedia.forRef('action', a.ts)) : '';
       return '<li><div class="d">' + esc(hebOf(a.ts)) + '<small>' + esc(fmtDate(a.ts)) + '</small></div>' +
         '<div class="t"><div class="h">' + esc(a.action) + ' ' + bits.join(' ') + '</div>' +
@@ -914,7 +967,13 @@
 
   // ============================================================ טפסים
   function renderForms() {
-    $('#formsList').innerHTML = FORMS.filter((f) => ['inspection', 'reservoir', 'zeria', 'hashaka', 'repair'].includes(f.key)).map((f) => '<a class="form-link" href="' + f.url + '" target="_blank" rel="noopener"><b>' + esc(f.title) + '</b><small>' + esc(f.desc) + '</small></a>').join('');
+    $('#formsList').innerHTML = FORMS.map((f) => '<a class="form-link" href="#" data-form="' + f.key + '"><b>' + f.icon + ' ' + esc(f.title) + '</b><small>' + esc(f.desc) + '</small></a>').join('');
+    $('#formsList').querySelectorAll('[data-form]').forEach((a) => a.addEventListener('click', (e) => {
+      e.preventDefault();
+      const key = a.dataset.form;
+      pickMikveh((m) => openReport(m, key));
+    }));
+    renderOutbox();
   }
 
   // ============================================================ ייצוא לאקסל
@@ -1047,7 +1106,7 @@
     $('#rmChosenSub').textContent = [m.council, m.region, m.address].filter(Boolean).join(' · ');
     $('#rmActions').innerHTML = FORMS.map((f) => '<button type="button" data-form="' + f.key + '"><span class="ic">' + f.icon + '</span>' + esc(f.title) + '<small>' + esc(f.desc) + '</small></button>').join('') +
       '<button type="button" class="card" data-form="card"><span class="ic">📁</span>פתיחת הכרטיס<small>כל הנתונים של המקווה</small></button>';
-    $('#rmNote').hidden = !!DataSource.url('data');
+    $('#rmNote').hidden = !!DataSource.url('data') && navigator.onLine;
   }
   function initReport() {
     $('#btnReport').addEventListener('click', () => openReport(null));
@@ -1067,14 +1126,14 @@
       const m = RM.chosen;
       if (b.dataset.form === 'card') { closeReport(); location.hash = '#/m/' + encodeURIComponent(m.id); return; }
       const f = FORMS.find((x) => x.key === b.dataset.form);
-      if (window.MikvehForms && DataSource.url('data')) MikvehForms.open(f.key, m);
-      else window.open(f.url, '_blank', 'noopener');
+      if (window.MikvehForms) MikvehForms.open(f.key, m);
     });
   }
   function rmHighlight() { $('#rmList').querySelectorAll('button[data-i]').forEach((b, i) => b.classList.toggle('sel', i === RM.sel)); }
 
   // ============================================================ הפעלה
-  DataSource.load().then((data) => {
+  // הטעינה מתחילה אחרי שכל הסקריפטים (auth.js וכו') נטענו, כדי שהסשן יישלח עם הבקשה
+  const start = () => DataSource.load().then((data) => {
     buildIndexes(data);
     $('#navCountList').textContent = data.mikvaot.length;
     $('#navCountTasks').textContent = data.tasks.length;
@@ -1100,6 +1159,9 @@
     $('#navToggle').addEventListener('click', () => document.body.classList.toggle('nav-open'));
     $('#navBackdrop').addEventListener('click', () => document.body.classList.remove('nav-open'));
     if (window.MikvehAuth) MikvehAuth.init();
+    renderOutbox();
+    Outbox.flush();
+    window.addEventListener('online', () => Outbox.flush());
     window.addEventListener('hashchange', route);
     route();
     if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
@@ -1108,4 +1170,5 @@
   }).catch((err) => {
     document.querySelector('main').innerHTML = '<div class="empty">שגיאה בטעינת הנתונים: ' + esc(err.message) + '</div>';
   });
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start); else start();
 })();
