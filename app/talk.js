@@ -30,13 +30,15 @@
       '<span class="mt">' + esc(K.hebOf(m.ts)) + ' · ' + esc(K.fmtDate(m.ts)) + (K.parseISO(m.ts) ? ' ' + K.parseISO(m.ts).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' }) : '') + '</span></div>' +
       (q ? '<div class="mq"><b>' + esc(q.author || '') + ':</b> ' + esc((q.text || '').slice(0, 120)) + '</div>' : '') +
       '<div class="mb">' + esc(m.text || '').replace(/\n/g, '<br>') + '</div>' +
+      (window.MikvehMedia ? MikvehMedia.thumbs(MikvehMedia.forRef('message', m.id)) : '') +
       '<div class="ma"><button type="button" class="lnk" data-reply="' + esc(m.id) + '">השב</button></div></div>';
   }
 
   function composer(ch) {
+    const pick = window.MikvehMedia ? MikvehMedia.picker('talkPics_' + (ch ? 'm' : 'g')) : null;
     return '<form class="composer" data-ch="' + esc(ch) + '"><div class="replybox" hidden></div>' +
-      '<textarea rows="2" placeholder="' + (ch ? 'כתוב על ' + esc(name(ch)) + '...' : 'הודעה לדיון הכללי...') + '"></textarea>' +
-      '<div class="crow"><button class="btn primary" type="submit">שליחה</button><span class="fmsg"></span></div></form>';
+      '<textarea rows="2" placeholder="' + (ch ? 'כתוב על ' + esc(name(ch)) + '...' : 'הודעה לדיון הכללי...') + ' (אפשר @שם לאזכור)"></textarea>' +
+      '<div class="crow"><button class="btn primary" type="submit">שליחה</button>' + (pick ? pick.html : '') + '<span class="fmsg"></span></div></form>';
   }
 
   function threadHtml(ch, showChannel) {
@@ -57,18 +59,21 @@
     }));
     const form = root.querySelector('.composer');
     if (!form) return;
+    const pics = window.MikvehMedia && form.querySelector('.mpick') ? MikvehMedia.picker(form.querySelector('.mpick').id).bind(form) : null;
     form.addEventListener('submit', (e) => {
       e.preventDefault();
       const K = MK();
       if (!K.requireUser()) return;
       const ta = form.querySelector('textarea'), msg = form.querySelector('.fmsg'), btn = form.querySelector('button[type=submit]');
-      const text = ta.value.trim();
+      const text = ta.value.trim() || (pics && pics.get().length ? '📷' : '');
       if (!text) return;
       btn.disabled = true; msg.textContent = 'שולח...'; msg.className = 'fmsg';
       const mid = form.dataset.ch;
       const m = mid ? K.S.byId[mid] : null;
       K.DataSource.post('addMessage', { mikveh: m ? m.name : '', text, replyTo: replyTo || '' }).then((res) => {
         if (res.record) { res.record.mikvehId = mid || null; K.S.data.messages.push(res.record); }
+        const items = pics ? pics.get() : [];
+        if (items.length && res.record) MikvehMedia.upload(items, { mikveh: m ? m.name : '', context: 'message', refId: res.record.id }).then(() => onSent()).catch((err) => K.toast('התמונות לא הועלו: ' + err.message));
         const nc = K.$('#navCountTalk'); if (nc) nc.textContent = all().length;
         replyTo = null; ta.value = ''; btn.disabled = false; msg.textContent = '';
         onSent();
@@ -109,6 +114,7 @@
     if (!url) return;
     const since = all().reduce((mx, m) => (m.ts > mx ? m.ts : mx), '');
     fetch(url + '&since=' + encodeURIComponent(since), { cache: 'no-store' }).then((r) => r.json()).then((d) => {
+      if (d.media) K.S.data.media = d.media;
       if (d.work) {
         // סנכרון מלא של השיבוצים (מי לקח מה)
         const changed = JSON.stringify(d.work) !== JSON.stringify(K.S.data.work);

@@ -267,6 +267,25 @@
   .wcard .wl{font-size:.8rem;color:var(--muted)}
   .wcard .wb{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px}
   .selcol{width:28px}
+  /* --- משתמש, תמונות --- */
+  .avatar{width:22px;height:22px;border-radius:50%;vertical-align:middle;object-fit:cover}
+  .avatar.big{width:44px;height:44px}
+  .user-btn small{opacity:.8;font-weight:400}
+  .umenu{position:fixed;top:64px;left:16px;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.18);padding:14px;z-index:60;min-width:260px;display:flex;flex-direction:column;gap:10px}
+  .um-head{display:flex;gap:10px;align-items:center;color:var(--ink)}
+  .um-head small{color:var(--muted)}
+  .umenu label{font-size:.76rem;font-weight:700;color:var(--muted)}
+  .um-row{display:flex;gap:6px;flex-wrap:wrap}
+  .um-row input,.um-row select{flex:1;min-width:120px;padding:7px 9px;border:1px solid var(--line);border-radius:7px}
+  .umenu .btn{text-align:center;text-decoration:none}
+  .mpick{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .mprev{display:flex;gap:6px;flex-wrap:wrap}
+  .mth{position:relative;display:inline-block}
+  .mth img{width:64px;height:64px;object-fit:cover;border-radius:8px;border:1px solid var(--line)}
+  .mth .x{position:absolute;top:-6px;inset-inline-end:-6px;background:var(--bad);color:#fff;border:none;border-radius:50%;width:20px;height:20px;font-size:.7rem;cursor:pointer}
+  .mthumbs{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+  .mthumbs img{width:110px;height:110px;object-fit:cover;border-radius:8px;border:1px solid var(--line);background:var(--gray-soft)}
+  .hint{color:var(--muted);font-size:.85rem}
   @media (max-width:760px){.talk{grid-template-columns:1fr}.chlist{position:static}}
 
   @media (max-width:640px){
@@ -399,6 +418,9 @@
   <!-- ===== חלוקת עבודה ===== -->
   <section class="view" id="view-work"></section>
 
+  <!-- ===== ניהול משתמשים ===== -->
+  <section class="view" id="view-users"></section>
+
   <!-- ===== דיונים ===== -->
   <section class="view" id="view-talk"></section>
 
@@ -446,6 +468,19 @@
     </form>
   </div>
 </div>
+<!-- ===== כניסה עם Google ===== -->
+<div class="modal-bg" id="loginModal" hidden>
+  <div class="modal" role="dialog" aria-labelledby="loginTitle" style="max-width:420px">
+    <div class="modal-head"><h2 id="loginTitle">כניסה למערכת</h2><button class="x" id="loginClose" type="button" aria-label="סגירה">✕</button></div>
+    <div class="modal-body" style="text-align:center">
+      <p style="font-size:.9rem;color:var(--muted);margin-bottom:14px">נכנסים עם חשבון Google. השם יירשם אוטומטית, וכל דיווח, הודעה ושיבוץ יירשמו על שמך.</p>
+      <div id="gsiButton" style="display:flex;justify-content:center;min-height:44px"></div>
+      <div class="fmsg" id="loginMsg" style="margin-top:10px"></div>
+      <p style="font-size:.78rem;color:var(--muted);margin-top:14px">אפשר להמשיך לצפות בלי כניסה; כניסה נדרשת רק כדי לדווח, לדון ולקחת משימות.</p>
+    </div>
+  </div>
+</div>
+<div class="umenu" id="userMenu" hidden></div>
 <div class="toast" id="toast" hidden></div>
 
 <script src="config.js"></script>
@@ -455,5 +490,7 @@
 <script src="forms.js"></script>
 <script src="talk.js"></script>
 <script src="work.js"></script>
+<script src="media.js"></script>
+<script src="auth.js"></script>
 </body>
 </html>

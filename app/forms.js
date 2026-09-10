@@ -117,8 +117,11 @@
       const def = ACTION_FORMS[key];
       html += '<div class="fgrid">' + def.fields.map((f) => fieldHtml(f, f.k, f.k === 'rabbi' ? user.name : (f.k === 'otzar' && m._presetOtzar ? m._presetOtzar : undefined))).join('') + '</div>';
     }
+    const pick = window.MikvehMedia ? MikvehMedia.picker('rmPics') : null;
+    html += (pick ? '<div class="ff wide" style="margin-top:10px"><span class="lbl">תמונות (רשות)</span>' + pick.html + '</div>' : '');
     html += '<div class="factions"><button class="btn primary" type="submit" id="rmSubmit">שמירה בתיק המקווה</button><span class="fmsg" id="rmMsg"></span></div></form>';
     root.innerHTML = html;
+    root._pics = pick ? pick.bind(root) : null;
 
     root.querySelector('#rmBack').addEventListener('click', () => { root.hidden = true; MK.$('#rmStep2').hidden = false; });
     root.querySelectorAll('input[type=date]').forEach((inp) => inp.addEventListener('input', () => { const s = root.querySelector('[data-heb-for="' + inp.id + '"]'); if (s) s.textContent = hebOfDateInput(inp.value); }));
@@ -159,6 +162,11 @@
     }
     MK.DataSource.post(action, data).then((res) => {
       msg.textContent = 'נשמר בתיק המקווה ✓'; msg.className = 'fmsg ok';
+      const pics = root._pics ? root._pics.get() : [];
+      if (pics.length && res.record && window.MikvehMedia) {
+        MikvehMedia.upload(pics, { mikveh: m.name, context: action === 'addInspection' ? 'inspection' : 'action', refId: res.record.ts })
+          .then(() => { MK.toast('התמונות הועלו'); MK.route(); }).catch((err) => MK.toast('התמונות לא הועלו: ' + err.message));
+      }
       if (action === 'addAction' && res.record) MK.addAction(res.record);
       if (action === 'addInspection' && res.record) MK.toast('דו"ח הפיקוח נשמר. הדוח המלא יופיע בכרטיס לאחר רענון הנתונים.');
       MK.toast('נרשם בתיק ' + m.name + ': ' + (key === 'inspection' ? 'דו"ח פיקוח' : def.action));

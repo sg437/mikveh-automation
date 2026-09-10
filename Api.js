@@ -72,9 +72,18 @@ function apiHandle_(e, action) {
       apiMikvaot_(ss).forEach(function (m) { ids[apiNorm_(m.name)] = m.id; });
       const work = apiWork_(ss);
       work.forEach(function (w) { const mid = ids[apiNorm_(w.mikveh)]; if (mid) w.mikvehId = mid; });
-      return jsonResponse_({ messages: apiMessages_(ss, (e.parameter && e.parameter.since) || ''), work: work });
+      const media = apiMedia_(ss);
+      media.forEach(function (x) { const mid = ids[apiNorm_(x.mikveh)]; if (mid) x.mikvehId = mid; });
+      return jsonResponse_({ messages: apiMessages_(ss, (e.parameter && e.parameter.since) || ''), work: work, media: media });
     }
-    if (action === 'data') return jsonResponse_(apiBuildData_());
+    if (action === 'data') {
+      const data = apiBuildData_();
+      // מי מחובר (אם נשלח טוקן סשן)
+      const tok = (e.parameter && e.parameter.session) || '';
+      data.me = tok ? authSession_(apiSpreadsheet_(), tok) : null;
+      data.authEnabled = authEnabled_();
+      return jsonResponse_(data);
+    }
     return jsonResponse_({ error: 'unknown action: ' + action });
   } catch (err) {
     return jsonResponse_({ error: String(err && err.message || err) });
@@ -114,11 +123,12 @@ function apiBuildData_() {
   const whatsapp = apiWhatsapp_();
   const messages = apiMessages_(ss, '');
   const work = apiWork_(ss);
+  const media = apiMedia_(ss);
 
   // קישור לפי שם מקווה מנורמל
   const ids = {};
   mikvaot.forEach(function (m) { ids[apiNorm_(m.name)] = m.id; });
-  [actions, inspections, tasks, whatsapp, messages, work].forEach(function (coll) {
+  [actions, inspections, tasks, whatsapp, messages, work, media].forEach(function (coll) {
     coll.forEach(function (rec) {
       const mid = ids[apiNorm_(rec.mikveh)];
       if (mid) rec.mikvehId = mid;
@@ -135,7 +145,8 @@ function apiBuildData_() {
       counts: { mikvaot: mikvaot.length, actions: actions.length, inspections: inspections.length, tasks: tasks.length, whatsapp: whatsapp.length, messages: messages.length },
       fieldLabels: labels,
     },
-    mikvaot: mikvaot, actions: actions, inspections: inspections, tasks: tasks, plugs: plugs, whatsapp: whatsapp, messages: messages, work: work,
+    mikvaot: mikvaot, actions: actions, inspections: inspections, tasks: tasks, plugs: plugs, whatsapp: whatsapp, messages: messages, work: work, media: media,
+    users: authPublicUsers_(ss),
   };
 }
 

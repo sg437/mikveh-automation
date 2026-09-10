@@ -36,13 +36,30 @@ function apiWritePost_(e, action) {
     if (token && given !== token) return jsonResponse_({ error: 'unauthorized' });
 
     const body = JSON.parse(e.postData.contents || '{}');
-    const user = body.user || {};
-    user.name = String(user.name || '').trim().slice(0, 80);
-    user.phone = String(user.phone || '').trim().slice(0, 30);
-    if (!user.name) return jsonResponse_({ error: 'חסר שם משתמש (הגדרות ➜ המשתמש שלי)' });
     const data = body.data || {};
-
     const ss = apiSpreadsheet_();
+
+    // ---- כניסה / יציאה (ללא סשן) ----
+    if (action === 'login') return jsonResponse_(authLogin_(ss, data));
+    if (action === 'logout') return jsonResponse_(authLogout_(ss, body.token));
+
+    // ---- זיהוי המשתמש: סשן (כשיש משתמשים מוגדרים) או שם מהמכשיר (מצב ישן) ----
+    let user;
+    if (authEnabled_()) {
+      user = authSession_(ss, body.token);
+      if (!user) return jsonResponse_({ error: 'נדרשת כניסה עם Google', code: 'auth' });
+      if (!authCan_(user, action)) return jsonResponse_({ error: 'אין לך הרשאה לפעולה זו (' + user.role + ')' });
+      if (action === 'updateMe') { data._token = body.token; return jsonResponse_(authUpdateMe_(ss, data, user)); }
+    } else {
+      user = body.user || {};
+      user.name = String(user.name || '').trim().slice(0, 80);
+      user.phone = String(user.phone || '').trim().slice(0, 30);
+      if (!user.name) return jsonResponse_({ error: 'חסר שם משתמש (הגדרות ➜ המשתמש שלי)' });
+    }
+
+    if (action === 'addMedia') return jsonResponse_(addMedia_(ss, data, user)); // בלי נעילה – העלאה איטית
+    if (['users', 'addUser', 'updateUser'].indexOf(action) >= 0) return jsonResponse_(authAdmin_(ss, action, data, user));
+
     const lock = LockService.getScriptLock();
     lock.waitLock(20000);
     try {
@@ -178,6 +195,11 @@ function writeMessage_(ss, d, user) {
   const id = Utilities.getUuid();
   const now = new Date();
   sh.appendRow([id, now, mikveh, user.name, user.phone, text, txt_(d.replyTo, 60), 'app']);
+  // אזכור @שם ➜ התראה אישית
+  if (text.indexOf('@') >= 0 && !d._system) {
+    const mentioned = authUsers_(ss).filter(function (u) { return u.active && u.phone && u.name && text.indexOf('@' + u.name) >= 0 && u.name !== user.name; });
+    if (mentioned.length) notifyUsers_(mentioned, '💬 ' + user.name + ' הזכיר/ה אותך ב' + (mikveh ? 'דיון על ' + mikveh : 'דיון הכללי') + ':\n' + text.slice(0, 300) + '\n\nלתגובה: פתח/י את מערכת המקוואות ➜ דיונים');
+  }
   return { ok: true, record: { id: id, ts: apiIsoDate_(now), mikveh: mikveh || null, mikvehId: mikveh ? apiNorm_(mikveh) : null, author: user.name, phone: user.phone, text: text, replyTo: txt_(d.replyTo, 60) || null, source: 'app' } };
 }
 
@@ -248,8 +270,11 @@ function addWorkItems_(ss, d, user) {
   if (!records.length) return { error: 'אף מקווה לא נמצא בבסיס הנתונים' };
   const typeLabel = WORK_TYPES[records[0].type];
   const text = '📋 ' + user.name + ' פתח/ה ' + records.length + ' משימות לחלוקה (' + typeLabel + '): ' + names.join(', ') + '.\nלבחירה: מסך "חלוקת עבודה" ➜ "אני לוקח".';
-  const msg = writeMessage_(ss, { mikveh: '', text: text }, { name: user.name, phone: user.phone });
+  const msg = writeMessage_(ss, { mikveh: '', text: text, _system: true }, { name: user.name, phone: user.phone });
   if (msg.record) msg.record.source = 'system';
+  // התראה למפקחים ולמנהלים (חוץ מהפותח)
+  notifyUsers_(authUsers_(ss).filter(function (u) { return u.active && u.phone && (u.role === 'מפקח' || u.role === 'מנהל') && u.name !== user.name; }),
+    '📋 ' + user.name + ' פתח/ה ' + records.length + ' משימות לחלוקה (' + typeLabel + '): ' + names.slice(0, 15).join(', ') + (names.length > 15 ? ' ועוד' : '') + '\n\nלבחירה: מערכת המקוואות ➜ חלוקת עבודה ➜ "אני לוקח"');
   return { ok: true, records: records, message: msg.record || null };
 }
 
@@ -278,8 +303,12 @@ function updateWorkItem_(ss, d, user) {
   const text = status === 'taken' ? '✋ ' + user.name + ' לוקח/ת: ' + m + ' (' + WORK_TYPES[rec.type] + ')'
     : status === 'done' ? '✅ ' + user.name + ' סיים/ה: ' + m + ' (' + WORK_TYPES[rec.type] + ')'
     : '↩️ ' + user.name + ' שחרר/ה: ' + m;
-  const msg = writeMessage_(ss, { mikveh: '', text: text }, user);
+  const msg = writeMessage_(ss, { mikveh: '', text: text, _system: true }, user);
   if (msg.record) msg.record.source = 'system';
+  // התראה למי שפתח את המשימה
+  if (rec.by && rec.by !== user.name) {
+    notifyUsers_(authUsers_(ss).filter(function (u) { return u.active && u.phone && u.name === rec.by; }), text);
+  }
   return { ok: true, record: rec, message: msg.record || null };
 }
 

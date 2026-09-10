@@ -127,7 +127,7 @@
       btn.addEventListener('click', () => {
         const ids = Array.from(table.querySelectorAll('input.sel:checked')).map((c) => c.value);
         const items = ids.map((id) => ({ mikveh: mk(id).name, note: rowsFn(id) }));
-        assign(items, typeKey).catch(() => {});
+        assign(items, typeKey).catch((err) => { if (err && err.message && err.message !== 'empty' && err.message !== 'אין משתמש') K.toast('המשימות לא נפתחו: ' + err.message); });
       });
     };
     wire('drainTable', 'btnAssignDrained', 'selDrained', 'fill', (id) => { const d = (K.drainedRows() || []).find((x) => x.m.id === id); return d ? 'רוקן ' + K.hebOf(d.drain.ts) + (d.drain.rabbi ? ' ע"י ' + d.drain.rabbi : '') : ''; });

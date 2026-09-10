@@ -49,8 +49,10 @@ function recordWhatsappAction_(queueRow, result) {
     }
     if (!when || isNaN(when)) when = parseStamp_(queueRow[COLS.RECEIVED - 1]) || new Date();
 
-    const sender = String(queueRow[COLS.SENDER_NAME - 1] || '').trim();
     const phone = String(queueRow[COLS.SENDER_PHONE - 1] || '').trim();
+    // אם השולח רשום במערכת (לפי טלפון) – הפעולה נרשמת על שמו במערכת
+    const known = authUserByPhone_(SpreadsheetApp.openById(sheetId), phone);
+    const sender = known ? known.name : String(queueRow[COLS.SENDER_NAME - 1] || '').trim();
     const otzar = /חב/.test(result.otzar || '') ? "חב''ד" : /השקה/.test(result.otzar || '') ? 'השקה' : /זריעה/.test(result.otzar || '') ? 'זריעה' : '';
     const note = 'מוואטסאפ: ' + (result.summary || '');
 

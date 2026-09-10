@@ -20,7 +20,8 @@
         (cfg.apiToken ? '&token=' + encodeURIComponent(cfg.apiToken) : '');
     },
     load: function () {
-      const url = this.url('data');
+      let url = this.url('data');
+      if (url && window.MikvehAuth) { try { const t = MikvehAuth.token(); if (t) url += '&session=' + encodeURIComponent(t); } catch (e) { /* ignore */ } }
       const fallback = (err) => {
         const d = Object.assign({}, window.MIKVEH_DATA || { mikvaot: [], actions: [], inspections: [], tasks: [], plugs: {}, meta: {} });
         d.source = url ? 'fallback' : 'static';
@@ -35,17 +36,25 @@
     },
     /** כתיבה לגיליון דרך ApiWrite.js. גוף text/plain כדי להימנע מ-preflight. */
     post: function (action, data) {
+      const token = window.MikvehAuth ? MikvehAuth.token() : '';
+      return this.postRaw(action, data, token).catch((err) => {
+        if (err.code === 'auth' && window.MikvehAuth) MikvehAuth.onAuthError();
+        throw err;
+      });
+    },
+    postRaw: function (action, data, token) {
       const url = this.url(action);
       if (!url) return Promise.reject(new Error('אין חיבור לגיליון – יש להגדיר apiUrl בקובץ config.js'));
       if (!navigator.onLine) return Promise.reject(new Error('אין חיבור לאינטרנט'));
-      return fetch(url, { method: 'POST', redirect: 'follow', cache: 'no-store', body: JSON.stringify({ action, user: getUser(), data }) })
+      return fetch(url, { method: 'POST', redirect: 'follow', cache: 'no-store', body: JSON.stringify({ action, user: getUser(), token: token || '', data }) })
         .then((r) => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
-        .then((d) => { if (d.error) throw new Error(d.error); return d; });
+        .then((d) => { if (d.error) { const e = new Error(d.error); e.code = d.code; throw e; } return d; });
     }
   };
 
   // ============================================================ המשתמש במכשיר הזה
   function getUser() {
+    if (window.MikvehAuth && MikvehAuth.enabled()) return MikvehAuth.me() || {};
     try { return JSON.parse(localStorage.getItem('mikveh.user') || '{}'); } catch (e) { return {}; }
   }
   function setUser(u) {
@@ -61,6 +70,7 @@
   }
   /** מחזיר true אם יש שם משתמש; אחרת פותח את חלון ההזדהות ומחזיר false. */
   function requireUser() {
+    if (window.MikvehAuth) { const r = MikvehAuth.requireUser(); if (r !== null) return r; }
     if (getUser().name) return true;
     toast('קודם נגדיר מי אתה (פעם אחת במכשיר הזה)');
     openUserModal(null);
@@ -68,7 +78,7 @@
   }
   function initUser() {
     setUser(getUser());
-    $('#btnUser').addEventListener('click', () => openUserModal(null));
+    $('#btnUser').addEventListener('click', () => { if (window.MikvehAuth && MikvehAuth.enabled()) MikvehAuth.openMenu(); else openUserModal(null); });
     $('#userClose').addEventListener('click', () => { $('#userModal').hidden = true; });
     $('#userForm').addEventListener('submit', (e) => {
       e.preventDefault();
@@ -253,6 +263,8 @@
       if (window.MikvehTalk) MikvehTalk.renderView(parts[1] || ''); $('#view-talk').classList.add('on');
     } else if (view === 'work') {
       if (window.MikvehWork) MikvehWork.renderView(parts[1] || ''); $('#view-work').classList.add('on');
+    } else if (view === 'users') {
+      if (window.MikvehAuth) MikvehAuth.renderUsersView(); $('#view-users').classList.add('on');
     } else {
       $('#view-list').classList.add('on');
     }
@@ -446,7 +458,8 @@
     '<div class="panel"><h3>שעות פתיחה</h3>' + dl([
       ['קיץ', esc(m.hoursSummer)], ['חורף', esc(m.hoursWinter)], ['ערב שבת וחג', esc(m.hoursErev)], ['מוצ"ש ויו"ט', esc(m.hoursMotzash)],
     ]) + '</div>' +
-    ((m.notes || m.notes2) ? '<div class="panel"><h3>הערות</h3><p>' + esc([m.notes, m.notes2].filter(Boolean).join(' · ')) + '</p></div>' : '');
+    ((m.notes || m.notes2) ? '<div class="panel"><h3>הערות</h3><p>' + esc([m.notes, m.notes2].filter(Boolean).join(' · ')) + '</p></div>' : '') +
+    (window.MikvehMedia ? MikvehMedia.gallery(m) : '');
   }
 
   function sectionOf(insp, key) {
@@ -495,9 +508,10 @@
       if (a.reservoirSealed) bits.push(badge('איטום מאגר: ' + a.reservoirSealed));
       if (a.liters) bits.push(badge(a.liters + ' ליטר'));
       const notes = [a.note, a.note2].filter(Boolean).join(' · ');
+      const pics = window.MikvehMedia ? MikvehMedia.thumbs(MikvehMedia.forRef('action', a.ts)) : '';
       return '<li><div class="d">' + esc(hebOf(a.ts)) + '<small>' + esc(fmtDate(a.ts)) + '</small></div>' +
         '<div class="t"><div class="h">' + esc(a.action) + ' ' + bits.join(' ') + '</div>' +
-        '<div class="n">' + esc([a.rabbi, a.attendant, a.phone].filter(Boolean).join(' · ')) + (notes ? '<br>' + esc(notes) : '') + '</div></div></li>';
+        '<div class="n">' + esc([a.rabbi, a.attendant, a.phone].filter(Boolean).join(' · ')) + (notes ? '<br>' + esc(notes) : '') + '</div>' + pics + '</div></li>';
     }).join('');
     return '<div class="panel"><h3>יומן פעולות</h3><div class="panel-tools"><button class="btn small" type="button" data-export="history">⬇ ייצוא לאקסל</button></div><ul class="timeline">' + items + '</ul></div>';
   }
@@ -1015,12 +1029,13 @@
     $('#footer').textContent = (data.source === 'live' || data.source === 'cached' ? 'מקור הנתונים: ' + (data.meta.spreadsheet || 'הגיליון החי') : 'מקור הנתונים: עותק מקומי של הגיליון') +
       ' (' + data.mikvaot.length + ' מקוואות, ' + data.actions.length + ' פעולות, ' + data.inspections.length + ' דוחות פיקוח, ' + (data.whatsapp || []).length + ' דיווחי וואטסאפ). גרסת מערכת 0.2';
     window.MK = { S, $, esc, hebOf, fmtDate, parseISO, badge, tel, findByName, DataSource, route, buildIndexes: rebuild, addAction, getUser, requireUser, openUserModal, toast, openReport, closeReport, pickMikveh, exportTable, uniq, fillSelect, certRows, drainedRows };
-    data.messages = data.messages || []; data.work = data.work || [];
+    data.messages = data.messages || []; data.work = data.work || []; data.media = data.media || []; data.users = data.users || [];
     $('#navCountTalk').textContent = data.messages.length;
     $('#navCountWork').textContent = data.work.filter((w) => w.status !== 'done').length;
     initList();
     initReport();
     initUser();
+    if (window.MikvehAuth) MikvehAuth.init();
     window.addEventListener('hashchange', route);
     route();
     if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
