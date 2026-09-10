@@ -294,6 +294,7 @@
     document.querySelectorAll('.view').forEach((v) => v.classList.remove('on'));
     document.querySelectorAll('nav a').forEach((a) => a.classList.toggle('on', a.dataset.view === (view === 'm' ? 'list' : view)));
     document.body.classList.remove('nav-open');
+    const bb = $('#btnBack'); if (bb) bb.hidden = (view === 'home');
     if (view === 'home') { renderHome(); $('#view-home').classList.add('on'); window.scrollTo(0, 0); return; }
     if (view === 'm' && parts[1]) {
       renderCard(decodeURIComponent(parts[1]), parts[2] || 'details');
@@ -314,6 +315,8 @@
       if (window.MikvehWork) MikvehWork.renderView(parts[1] || ''); $('#view-work').classList.add('on');
     } else if (view === 'users') {
       if (window.MikvehAuth) MikvehAuth.renderUsersView(); $('#view-users').classList.add('on');
+    } else if (view === 'settings') {
+      if (window.MikvehPerms) MikvehPerms.render(); $('#view-settings').classList.add('on');
     } else {
       $('#view-list').classList.add('on');
     }
@@ -463,7 +466,7 @@
     const tabs = [
       ['details', 'פרטים'], ['otzarot', 'אוצרות ומאגר'], ['history', 'היסטוריית פעולות', acts.length],
       ['inspections', 'דוחות פיקוח', ins.length], ['tasks', 'משימות', tasks.length + plugs.length + (window.MikvehWork ? MikvehWork.forMikveh(m.id).length : 0)],
-      ['talk', 'דיון', (S.data.messages || []).filter((x) => x.mikvehId === m.id).length], ['photos', 'תמונות', window.MikvehMedia ? MikvehMedia.photosCount(m) : 0], ['whatsapp', 'דיווחי וואטסאפ', (S.wa[m.id] || []).length],
+      ['talk', 'דיון', (S.data.messages || []).filter((x) => x.mikvehId === m.id).length], ['photos', 'מדיה', window.MikvehMedia ? MikvehMedia.photosCount(m) : 0], ['whatsapp', 'דיווחי וואטסאפ', (S.wa[m.id] || []).length],
     ];
     const tabBar = '<div class="tabs">' + tabs.map(([k, t, n]) =>
       '<button type="button" data-tab="' + k + '" class="' + (k === tab ? 'on' : '') + '">' + t + (n != null ? '<span class="n">' + n + '</span>' : '') + '</button>').join('') + '</div>';
@@ -668,6 +671,7 @@
       '<a href="#/plan/drained"><span class="ic">💧</span> מאגרים לתכנון מילוי <span class="n">' + drained + '</span></a>' +
       '<a href="#/tasks"><span class="ic">⚠️</span> משימות דחופות <span class="n ' + (urgentTasks ? 'warn' : '') + '">' + urgentTasks + '</span></a>' +
       '<a href="#/talk"><span class="ic">💬</span> דיונים <span class="n">' + (S.data.messages || []).length + '</span></a>' +
+      '<a href="?app=talk#/talk" target="_blank" rel="noopener" title="פתיחת הדיונים בחלון נפרד – אפשר להתקין בטלפון כאפליקציה"><span class="ic">📲</span> הדיונים כאפליקציה</a>' +
     '</div>';
 
     // פעילות אחרונה: פעולות + דיווחי וואטסאפ + הודעות, לפי זמן
@@ -1145,13 +1149,20 @@
     $('#footer').textContent = (data.source === 'live' || data.source === 'cached' ? 'מקור הנתונים: ' + (data.meta.spreadsheet || 'הגיליון החי') : 'מקור הנתונים: עותק מקומי של הגיליון') +
       ' (' + data.mikvaot.length + ' מקוואות, ' + data.actions.length + ' פעולות, ' + data.inspections.length + ' דוחות פיקוח, ' + (data.whatsapp || []).length + ' דיווחי וואטסאפ). גרסת מערכת 0.2';
     window.MK = { S, $, esc, hebOf, fmtDate, parseISO, badge, tel, findByName, DataSource, route, buildIndexes: rebuild, addAction, getUser, requireUser, openUserModal, toast, openReport, closeReport, pickMikveh, exportTable, uniq, fillSelect, certRows, drainedRows };
+    // מצב "אפליקציית דיונים" – פתיחה ישירה בדיונים, בלי שאר המסכים
+    if (/[?&]app=talk/.test(location.search)) {
+      document.body.classList.add('talk-app');
+      if (!location.hash || location.hash === '#/') location.hash = '#/talk';
+    }
     data.messages = data.messages || []; data.work = data.work || []; data.media = data.media || []; data.users = data.users || [];
+    data.groups = data.groups || []; data.reactions = data.reactions || []; data.perms = data.perms || null;
     $('#navCountTalk').textContent = data.messages.length;
     $('#navCountWork').textContent = data.work.filter((w) => w.status !== 'done').length;
     initList();
     initReport();
     initUser();
     $('#navToggle').addEventListener('click', () => document.body.classList.toggle('nav-open'));
+    $('#btnBack').addEventListener('click', () => { if (history.length > 1) history.back(); else location.hash = '#/'; });
     $('#navBackdrop').addEventListener('click', () => document.body.classList.remove('nav-open'));
     if (window.MikvehAuth) MikvehAuth.init();
     renderOutbox();

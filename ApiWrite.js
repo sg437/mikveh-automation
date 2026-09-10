@@ -19,7 +19,11 @@ const WRITE = {
   ACTIONS_SHEET: 'אוצר זריעה',
   RAW_INSPECTION_SHEET: 'פיקוח הלכתי',
   MESSAGES_SHEET: 'דיונים',
-  MESSAGES_HEADERS: ['מזהה', 'זמן', 'מקווה', 'כותב', 'טלפון', 'טקסט', 'תגובה ל', 'מקור'],
+  MESSAGES_HEADERS: ['מזהה', 'זמן', 'מקווה', 'כותב', 'טלפון', 'טקסט', 'תגובה ל', 'מקור', 'קבוצה'],
+  GROUPS_SHEET: 'קבוצות דיון',
+  GROUPS_HEADERS: ['מזהה', 'שם', 'נושא', 'חברים (מזהי משתמש)', 'פתוחה לכולם', 'נוצרה', 'נוצרה ע"י', 'פעילה'],
+  REACTIONS_SHEET: 'תגובות',
+  REACTIONS_HEADERS: ['מזהה הודעה', 'משתמש', 'שם', 'אימוג\'י', 'זמן'],
   WORK_SHEET: 'שיבוצים',
   WORK_HEADERS: ['מזהה', 'זמן פתיחה', 'סוג', 'מקווה', 'סטטוס', 'נלקח ע"י', 'טלפון', 'זמן לקיחה', 'זמן ביצוע', 'הערה', 'נפתח ע"י'],
   WORK_LIMIT: 3000,
@@ -70,6 +74,9 @@ function apiWritePost_(e, action) {
       if (action === 'updateWorkItem') return jsonResponse_(updateWorkItem_(ss, data, user));
       if (action === 'updateMikveh') return jsonResponse_(updateMikveh_(ss, data, user));
       if (action === 'addMikveh') return jsonResponse_(addMikveh_(ss, data, user));
+      if (action === 'addGroup') return jsonResponse_(addGroup_(ss, data, user));
+      if (action === 'updateGroup') return jsonResponse_(updateGroup_(ss, data, user));
+      if (action === 'react') return jsonResponse_(react_(ss, data, user));
     } finally {
       lock.releaseLock();
     }
@@ -193,16 +200,22 @@ function writeMessage_(ss, d, user) {
     mikveh = canonicalMikveh_(ss, d.mikveh);
     if (!mikveh) return { error: 'המקווה "' + txt_(d.mikveh, 80) + '" לא נמצא בבסיס הנתונים' };
   }
+  const group = txt_(d.group, 60);
+  if (group && !d._system) {
+    const g = apiGroups_(ss).filter(function (x) { return x.id === group; })[0];
+    if (!g) return { error: 'הקבוצה לא נמצאה' };
+    if (!g.open && user.id && g.members.indexOf(user.id) < 0) return { error: 'אינך חבר/ה בקבוצה הזו' };
+  }
   const sh = messagesSheet_(ss);
   const id = Utilities.getUuid();
   const now = new Date();
-  sh.appendRow([id, now, mikveh, user.name, user.phone, text, txt_(d.replyTo, 60), 'app']);
+  sh.appendRow([id, now, mikveh, user.name, user.phone, text, txt_(d.replyTo, 60), 'app', group]);
   // אזכור @שם ➜ התראה אישית
   if (text.indexOf('@') >= 0 && !d._system) {
     const mentioned = authUsers_(ss).filter(function (u) { return u.active && u.phone && u.name && text.indexOf('@' + u.name) >= 0 && u.name !== user.name; });
     if (mentioned.length) notifyUsers_(mentioned, '💬 ' + user.name + ' הזכיר/ה אותך ב' + (mikveh ? 'דיון על ' + mikveh : 'דיון הכללי') + ':\n' + text.slice(0, 300) + '\n\nלתגובה: פתח/י את מערכת המקוואות ➜ דיונים');
   }
-  return { ok: true, record: { id: id, ts: apiIsoDate_(now), mikveh: mikveh || null, mikvehId: mikveh ? apiNorm_(mikveh) : null, author: user.name, phone: user.phone, text: text, replyTo: txt_(d.replyTo, 60) || null, source: 'app' } };
+  return { ok: true, record: { id: id, ts: apiIsoDate_(now), mikveh: mikveh || null, mikvehId: mikveh ? apiNorm_(mikveh) : null, group: group || null, author: user.name, authorId: user.id || null, phone: user.phone, text: text, replyTo: txt_(d.replyTo, 60) || null, source: 'app' } };
 }
 
 /** כל ההודעות (עד MSG_LIMIT האחרונות), בסדר עולה. since = ISO: רק הודעות חדשות ממנו. */
@@ -219,7 +232,7 @@ function apiMessages_(ss, since) {
     if (since && ts <= since) return;
     out.push(apiCompact_({
       id: String(v[0]), ts: ts, mikveh: apiClean_(v[2]), author: apiClean_(v[3]), phone: apiClean_(v[4]),
-      text: apiClean_(v[5]), replyTo: apiClean_(v[6]), source: apiClean_(v[7]) || 'app',
+      text: apiClean_(v[5]), replyTo: apiClean_(v[6]), source: apiClean_(v[7]) || 'app', group: apiClean_(v[8]),
     }));
   });
   if (since) {
@@ -390,4 +403,110 @@ function addMikveh_(ss, d, user) {
   const msg = writeMessage_(ss, { mikveh: name, text: '🆕 ' + user.name + ' הוסיף/ה את המקווה למערכת', _system: true }, user);
   if (msg.record) msg.record.source = 'system';
   return { ok: true, record: rec, message: msg.record || null };
+}
+
+// ==================== קבוצות דיון ====================
+
+function groupsSheet_(ss) {
+  let sh = ss.getSheetByName(WRITE.GROUPS_SHEET);
+  if (!sh) {
+    sh = ss.insertSheet(WRITE.GROUPS_SHEET);
+    sh.appendRow(WRITE.GROUPS_HEADERS);
+    sh.setFrozenRows(1);
+    sh.setRightToLeft(true);
+  }
+  return sh;
+}
+
+function apiGroups_(ss) {
+  const sh = ss.getSheetByName(WRITE.GROUPS_SHEET);
+  if (!sh || sh.getLastRow() < 2) return [];
+  const values = sh.getRange(2, 1, sh.getLastRow() - 1, WRITE.GROUPS_HEADERS.length).getValues();
+  const out = [];
+  values.forEach(function (v, i) {
+    if (!v[0]) return;
+    out.push({ id: String(v[0]), name: apiClean_(v[1]) || '', topic: apiClean_(v[2]) || '',
+      members: String(v[3] || '').split(',').map(function (x) { return x.trim(); }).filter(Boolean),
+      open: String(v[4]) === 'כן', ts: apiIso_(v[5]), by: apiClean_(v[6]) || '', active: String(v[7]) !== 'לא', rowNum: i + 2 });
+  });
+  return out.filter(function (g) { return g.active; }).map(function (g) { delete g.rowNum; return g; });
+}
+
+function addGroup_(ss, d, user) {
+  const name = txt_(d.name, 80);
+  if (!name) return { error: 'חסר שם קבוצה' };
+  const sh = groupsSheet_(ss);
+  const id = Utilities.getUuid().slice(0, 8);
+  const members = (Array.isArray(d.members) ? d.members : []).map(function (x) { return String(x).trim(); }).filter(Boolean);
+  if (user.id && members.indexOf(user.id) < 0) members.push(user.id);
+  const now = new Date();
+  sh.appendRow([id, name, txt_(d.topic, 200), members.join(','), d.open ? 'כן' : 'לא', now, user.name, 'כן']);
+  const rec = { id: id, name: name, topic: txt_(d.topic, 200), members: members, open: !!d.open, ts: apiIsoDate_(now), by: user.name, active: true };
+  // התראה לחברים
+  const users = authUsers_(ss).filter(function (u) { return u.active && u.phone && members.indexOf(u.id) >= 0 && u.name !== user.name; });
+  notifyUsers_(users, '👥 ' + user.name + ' צירף/ה אותך לקבוצת הדיון "' + name + '"' + (rec.topic ? ' (' + rec.topic + ')' : '') + '\n\nמערכת המקוואות ➜ דיונים');
+  return { ok: true, record: rec };
+}
+
+function updateGroup_(ss, d, user) {
+  const sh = groupsSheet_(ss);
+  const last = sh.getLastRow();
+  if (last < 2) return { error: 'הקבוצה לא נמצאה' };
+  const ids = sh.getRange(2, 1, last - 1, 1).getValues();
+  let rowNum = -1;
+  for (let i = 0; i < ids.length; i++) { if (String(ids[i][0]) === String(d.id)) { rowNum = i + 2; break; } }
+  if (rowNum < 0) return { error: 'הקבוצה לא נמצאה' };
+  const row = sh.getRange(rowNum, 1, 1, WRITE.GROUPS_HEADERS.length).getValues()[0];
+  if (user.role && user.role !== 'מנהל' && apiClean_(row[6]) !== user.name) return { error: 'רק מי שפתח/ה את הקבוצה או מנהל יכולים לערוך אותה' };
+  if (d.name) row[1] = txt_(d.name, 80);
+  if (d.topic !== undefined) row[2] = txt_(d.topic, 200);
+  if (Array.isArray(d.members)) row[3] = d.members.map(function (x) { return String(x).trim(); }).filter(Boolean).join(',');
+  if (d.open !== undefined) row[4] = d.open ? 'כן' : 'לא';
+  if (d.active !== undefined) row[7] = d.active ? 'כן' : 'לא';
+  sh.getRange(rowNum, 1, 1, row.length).setValues([row]);
+  return { ok: true, record: { id: String(row[0]), name: apiClean_(row[1]), topic: apiClean_(row[2]),
+    members: String(row[3] || '').split(',').map(function (x) { return x.trim(); }).filter(Boolean), open: String(row[4]) === 'כן',
+    ts: apiIso_(row[5]), by: apiClean_(row[6]), active: String(row[7]) !== 'לא' } };
+}
+
+// ==================== תגובות (אימוג'י) ====================
+
+function reactionsSheet_(ss) {
+  let sh = ss.getSheetByName(WRITE.REACTIONS_SHEET);
+  if (!sh) {
+    sh = ss.insertSheet(WRITE.REACTIONS_SHEET);
+    sh.appendRow(WRITE.REACTIONS_HEADERS);
+    sh.setFrozenRows(1);
+    sh.setRightToLeft(true);
+  }
+  return sh;
+}
+
+/** מוסיף או מסיר תגובה (לחיצה שנייה על אותו אימוג'י מסירה). */
+function react_(ss, d, user) {
+  const msgId = txt_(d.messageId, 60), emoji = txt_(d.emoji, 8);
+  if (!msgId || !emoji) return { error: 'חסרים פרטים' };
+  const sh = reactionsSheet_(ss);
+  const uid = user.id || user.name;
+  const last = sh.getLastRow();
+  if (last >= 2) {
+    const values = sh.getRange(2, 1, last - 1, 4).getValues();
+    for (let i = 0; i < values.length; i++) {
+      if (String(values[i][0]) === msgId && String(values[i][1]) === String(uid) && String(values[i][3]) === emoji) {
+        sh.deleteRow(i + 2);
+        return { ok: true, removed: true, record: { messageId: msgId, userId: uid, name: user.name, emoji: emoji } };
+      }
+    }
+  }
+  sh.appendRow([msgId, uid, user.name, emoji, new Date()]);
+  return { ok: true, record: { messageId: msgId, userId: uid, name: user.name, emoji: emoji } };
+}
+
+function apiReactions_(ss) {
+  const sh = ss.getSheetByName(WRITE.REACTIONS_SHEET);
+  if (!sh || sh.getLastRow() < 2) return [];
+  const values = sh.getRange(2, 1, sh.getLastRow() - 1, WRITE.REACTIONS_HEADERS.length).getValues();
+  const out = [];
+  values.forEach(function (v) { if (v[0]) out.push({ messageId: String(v[0]), userId: String(v[1]), name: apiClean_(v[2]) || '', emoji: String(v[3]) }); });
+  return out;
 }
