@@ -71,6 +71,7 @@
     try { if (window.google && google.accounts) google.accounts.id.disableAutoSelect(); } catch (e) { /* ignore */ }
     K.toast('יצאת מהמערכת');
     if (location.hash.startsWith('#/users')) location.hash = '#/';
+    if (MK().$('#view-home').classList.contains('on')) MK().route();
   }
 
   // ---- תפריט משתמש ----

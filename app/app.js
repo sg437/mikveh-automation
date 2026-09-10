@@ -243,9 +243,10 @@
   function route() {
     const h = location.hash || '#/';
     const parts = h.replace(/^#\/?/, '').split('/');
-    const view = parts[0] || 'list';
+    const view = parts[0] || 'home';
     document.querySelectorAll('.view').forEach((v) => v.classList.remove('on'));
     document.querySelectorAll('nav a').forEach((a) => a.classList.toggle('on', a.dataset.view === (view === 'm' ? 'list' : view)));
+    if (view === 'home') { renderHome(); $('#view-home').classList.add('on'); window.scrollTo(0, 0); return; }
     if (view === 'm' && parts[1]) {
       renderCard(decodeURIComponent(parts[1]), parts[2] || 'details');
       $('#view-card').classList.add('on');
@@ -392,7 +393,7 @@
 
     const formMenu = '<button class="btn primary" id="cardReport" type="button">＋ דיווח / עדכון</button>';
 
-    const head = '<a class="back" href="#/">‹ חזרה לרשימה</a>' +
+    const head = '<a class="back" href="#/list">‹ חזרה לרשימה</a>' +
       '<div class="card-head"><div class="title"><div>' +
         '<h2>' + esc(m.name) + '</h2>' +
         '<div class="loc">' + [m.council, m.region, m.localityType, m.address].filter(Boolean).map(esc).join(' · ') + '</div>' +
@@ -578,6 +579,64 @@
     S.tasksShown = list;
     $('#tasksSummary').innerHTML = '<b>' + list.length + '</b> משימות · <b>' + list.filter((t) => t.priority === 'דחוף').length + '</b> דחופות';
     $('#tasksTable').innerHTML = TASK_HEAD + '<tbody>' + (list.length ? list.map(taskRow).join('') : '<tr><td colspan="8" class="empty">אין משימות</td></tr>') + '</tbody>';
+  }
+
+  // ============================================================ דף הבית
+  function renderHome() {
+    const ms = S.data.mikvaot, D = S.derived;
+    const sup = ms.filter((m) => (m.supervised || '').trim() === 'כן');
+    const certOk = sup.filter((m) => D[m.id].cert.key === 'ok' || D[m.id].cert.key === 'warn').length;
+    const certBad = sup.filter((m) => D[m.id].cert.key === 'bad').length;
+    const certSoon = sup.filter((m) => D[m.id].cert.key === 'warn').length;
+    const year = todayHeb.year, yl = HebDate.yearLabel(year);
+    const ytd = periodStats((o) => o >= year * 100 && o <= todayOrd);
+    const month = periodStats((o) => o === todayOrd);
+    const treated = new Set();
+    S.data.actions.forEach((a) => { if (a._ord && a._ord >= year * 100 && a._ord <= todayOrd) treated.add(a.mikvehId || a.mikveh); });
+    S.data.inspections.forEach((i) => { if (i._ord && i._ord >= year * 100 && i._ord <= todayOrd) treated.add(i.mikvehId || i.mikveh); });
+    const work = (S.data.work || []).filter((w) => w.status !== 'done');
+    const drained = drainedRows().length;
+    const urgentTasks = S.data.tasks.filter((t) => t.priority === 'דחוף').length;
+    const pct = (a, b) => (b ? Math.round(100 * a / b) : 0);
+    const user = getUser();
+    const mo = HebDate.monthName(todayHeb.year, todayHeb.month);
+
+    const tile = (cls, ic, num, lbl, sub, href, ring) => '<a class="t3 ' + cls + '" href="' + href + '">' + (ring != null ? '<span class="ring" style="--p:' + ring + '" data-p="' + ring + '"></span>' : '') + '<span class="ic">' + ic + '</span><span class="num">' + num.toLocaleString('he-IL') + '</span><span class="lbl">' + lbl + '</span><span class="sub">' + sub + '</span></a>';
+    const tiles = '<div class="tiles3d">' +
+      tile('', '🕍', sup.length, 'מקוואות בפיקוח טהרת המשפחה', 'מתוך ' + ms.length.toLocaleString('he-IL') + ' מקוואות במאגר', '#/list', pct(sup.length, ms.length)) +
+      tile('gold', '📜', certOk, 'עם תעודת כשרות בתוקף', certBad + ' פג תוקפן · ' + certSoon + ' פגות בקרוב', '#/plan/certs', pct(certOk, sup.length)) +
+      tile('green', '🛠', treated.size, 'מקוואות שטופלו השנה', 'מתחילת שנת ' + esc(yl) + ' · ' + ytd.total.toLocaleString('he-IL') + ' פעולות', '#/dashboard') +
+      tile('teal', '💧', ytd.otzar, 'החליפו אוצרות השנה', ytd.otzarot + ' אוצרות · ' + ytd.drain + ' ריקוני מאגר', '#/plan/drained') +
+      tile('plum', '📋', ytd.cert, 'קיבלו תעודה השנה', 'החודש (' + esc(mo) + '): ' + month.cert, '#/dashboard') +
+      tile('rust', '✋', work.length, 'משימות פתוחות לחלוקה', work.filter((w) => w.status === 'taken').length + ' נלקחו · ' + drained + ' מאגרים ממתינים למילוי', '#/work') +
+    '</div>';
+
+    const quick = '<div class="quick">' +
+      '<button type="button" id="homeReport"><span class="ic">＋</span> דיווח / עדכון</button>' +
+      '<a href="#/plan/certs"><span class="ic">📜</span> תעודות לחידוש <span class="n ' + (certBad ? 'bad' : '') + '">' + (certBad + certSoon) + '</span></a>' +
+      '<a href="#/plan/drained"><span class="ic">💧</span> מאגרים לתכנון מילוי <span class="n">' + drained + '</span></a>' +
+      '<a href="#/tasks"><span class="ic">⚠️</span> משימות דחופות <span class="n ' + (urgentTasks ? 'warn' : '') + '">' + urgentTasks + '</span></a>' +
+      '<a href="#/talk"><span class="ic">💬</span> דיונים <span class="n">' + (S.data.messages || []).length + '</span></a>' +
+    '</div>';
+
+    // פעילות אחרונה: פעולות + דיווחי וואטסאפ + הודעות, לפי זמן
+    const feed = [];
+    S.data.actions.slice(-40).forEach((a) => a.ts && feed.push({ ts: a.ts, ic: '📝', html: '<b>' + (a.mikvehId ? '<a href="#/m/' + encodeURIComponent(a.mikvehId) + '/history">' + esc(a.mikveh) + '</a>' : esc(a.mikveh)) + '</b> · ' + esc(a.action) + (a.otzar ? ' ' + esc(a.otzar) : '') + (a.rabbi ? '<small>' + esc(a.rabbi) + '</small>' : '') }));
+    (S.data.whatsapp || []).slice(0, 20).forEach((w) => w.ts && feed.push({ ts: w.ts, ic: '📱', html: '<b>' + esc(w.mikveh || w.settlement || 'וואטסאפ') + '</b> · ' + esc(w.summary || (w.text || '').slice(0, 80)) + '<small>' + esc(w.sender || '') + '</small>' }));
+    (S.data.messages || []).slice(-20).forEach((x) => x.ts && feed.push({ ts: x.ts, ic: x.source === 'system' ? '🔔' : '💬', html: (x.mikvehId ? '<b><a href="#/talk/' + encodeURIComponent(x.mikvehId) + '">' + esc((S.byId[x.mikvehId] || {}).name || '') + '</a></b> · ' : '') + esc((x.text || '').slice(0, 90)) + '<small>' + esc(x.author || '') + '</small>' }));
+    feed.sort((a, b) => b.ts.localeCompare(a.ts));
+    const feedHtml = '<div class="panel"><h3>פעילות אחרונה</h3><ul class="feed">' + feed.slice(0, 12).map((f) => '<li><span class="fi">' + f.ic + '</span><div class="ft">' + f.html + '</div><small style="white-space:nowrap">' + esc(hebOf(f.ts)) + '</small></li>').join('') + '</ul></div>';
+
+    const byRegion = groupCount(sup, (m) => m.region || 'לא מוגדר');
+    const regionHtml = '<div class="panel"><h3>מקוואות בפיקוח לפי איזור</h3>' + bars(byRegion, byRegion[0] ? byRegion[0][1] : 1) + '</div>';
+    const soon = certRows().filter((c) => !c.expired && c.days <= 45).slice(0, 8);
+    const soonHtml = '<div class="panel"><h3>תעודות שפגות ב-45 הימים הקרובים</h3>' + (soon.length ? '<ul class="feed">' + soon.map((c) => '<li><span class="fi">📜</span><div class="ft"><b><a href="#/m/' + encodeURIComponent(c.m.id) + '">' + esc(c.m.name) + '</a></b> · ' + esc(c.m.council || '') + '<small>' + esc(c.m.certificate) + ' · ' + (c.days <= 0 ? 'פג החודש' : 'בעוד ' + c.days + ' ימים') + '</small></div></li>').join('') + '</ul>' : '<div class="empty">אין תעודות שפגות בקרוב</div>') + '<div class="panel-tools" style="margin-top:8px"><a class="btn small" href="#/plan/certs">לרשימה המלאה</a></div></div>';
+    const monthHtml = '<div class="panel"><h3>החודש – ' + esc(mo + ' ' + HebDate.yearLabel(todayHeb.year)) + '</h3><div class="dl"><dl class="dl">' +
+      [['קיבלו תעודה', month.cert], ['החליפו אוצרות', month.otzar], ['רוקנו מאגר', month.drain], ['תיקונים וטיפולים', month.other], ['ביקורות פיקוח', month.insp], ['סה"כ פעולות', month.total]].map(([k, v]) => '<div><dt>' + k + '</dt><dd>' + v + '</dd></div>').join('') + '</dl></div><div class="panel-tools" style="margin-top:8px"><a class="btn small" href="#/dashboard">לנתונים החיים המלאים</a></div></div>';
+
+    $('#view-home').innerHTML = '<div class="hero"><div><h2>טהרת המשפחה · <span>כשרות המקוואות</span></h2><div class="sub">' + (user.name ? 'שלום ' + esc(user.name) + '. ' : '') + 'תמונת מצב חיה של כל המקוואות בפיקוח.</div></div><div class="today">היום <b>' + esc(HebDate.format(new Date())) + '</b> · ' + esc(fmtDate(new Date().toISOString())) + '</div></div>' +
+      tiles + quick + '<div class="home-grid">' + feedHtml + soonHtml + monthHtml + regionHtml + '</div>';
+    $('#homeReport').addEventListener('click', () => openReport(null));
   }
 
   // ============================================================ לוח בקרה

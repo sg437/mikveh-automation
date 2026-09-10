@@ -85,6 +85,49 @@
   .more{display:flex;justify-content:center;padding:18px}
   .empty{padding:40px;text-align:center;color:var(--muted)}
 
+  /* --- דף הבית --- */
+  .hero{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap;margin:4px 0 16px}
+  .hero h2{font-size:1.5rem;font-weight:900;color:var(--brand)}
+  .hero h2 span{color:var(--brand-2)}
+  .hero .sub{color:var(--muted);font-size:.9rem}
+  .hero .today{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:8px 14px;font-size:.85rem;box-shadow:var(--shadow)}
+  .hero .today b{color:var(--brand);font-size:1rem}
+  .tiles3d{display:grid;grid-template-columns:repeat(auto-fit,minmax(168px,1fr));gap:14px;margin-bottom:18px;perspective:900px}
+  .t3{position:relative;border-radius:22px;padding:18px 16px 16px;color:#fff;text-decoration:none;display:flex;flex-direction:column;gap:4px;min-height:150px;
+    background:linear-gradient(150deg,#2A79AD 0%,#1F5F8B 45%,#123C5A 100%);
+    box-shadow:0 14px 28px rgba(18,60,90,.30),0 3px 6px rgba(18,60,90,.18),inset 0 1px 0 rgba(255,255,255,.35),inset 0 -8px 16px rgba(0,0,0,.18);
+    transition:transform .18s ease,box-shadow .18s ease}
+  .t3::before{content:"";position:absolute;inset:0;border-radius:22px;background:radial-gradient(120% 70% at 20% 0%,rgba(255,255,255,.22),transparent 60%);pointer-events:none}
+  .t3:hover{transform:translateY(-4px) rotateX(3deg);box-shadow:0 20px 34px rgba(18,60,90,.34),0 4px 8px rgba(18,60,90,.2),inset 0 1px 0 rgba(255,255,255,.35)}
+  .t3 .ic{font-size:1.5rem;line-height:1;filter:drop-shadow(0 2px 2px rgba(0,0,0,.25))}
+  .t3 .num{font-size:2.3rem;font-weight:900;line-height:1.1;margin-top:auto;text-shadow:0 2px 4px rgba(0,0,0,.25);font-variant-numeric:tabular-nums}
+  .t3 .lbl{font-size:.88rem;font-weight:800;line-height:1.25}
+  .t3 .sub{font-size:.74rem;opacity:.85}
+  .t3.gold{background:linear-gradient(150deg,#F5D67A 0%,#E8C15A 45%,#C99B2E 100%);color:#2A1F05;box-shadow:0 14px 28px rgba(201,155,46,.32),0 3px 6px rgba(201,155,46,.2),inset 0 1px 0 rgba(255,255,255,.5),inset 0 -8px 16px rgba(0,0,0,.12)}
+  .t3.gold .num{text-shadow:0 1px 2px rgba(255,255,255,.4)}
+  .t3.green{background:linear-gradient(150deg,#3E9B60 0%,#2E7D46 45%,#1E5A31 100%);box-shadow:0 14px 28px rgba(46,125,70,.30),0 3px 6px rgba(46,125,70,.18),inset 0 1px 0 rgba(255,255,255,.3),inset 0 -8px 16px rgba(0,0,0,.18)}
+  .t3.teal{background:linear-gradient(150deg,#2E9AA6 0%,#207C87 45%,#145560 100%);box-shadow:0 14px 28px rgba(32,124,135,.30),0 3px 6px rgba(32,124,135,.18),inset 0 1px 0 rgba(255,255,255,.3),inset 0 -8px 16px rgba(0,0,0,.18)}
+  .t3.plum{background:linear-gradient(150deg,#8E4A8B 0%,#6E3369 45%,#4A1348 100%);box-shadow:0 14px 28px rgba(74,19,72,.30),0 3px 6px rgba(74,19,72,.18),inset 0 1px 0 rgba(255,255,255,.3),inset 0 -8px 16px rgba(0,0,0,.18)}
+  .t3.rust{background:linear-gradient(150deg,#D9744F 0%,#B7551F 45%,#7E3A12 100%);box-shadow:0 14px 28px rgba(183,85,31,.30),0 3px 6px rgba(183,85,31,.18),inset 0 1px 0 rgba(255,255,255,.3),inset 0 -8px 16px rgba(0,0,0,.18)}
+  .t3 .ring{position:absolute;top:14px;left:14px;width:56px;height:56px;border-radius:50%;background:conic-gradient(rgba(255,255,255,.95) calc(var(--p) * 1%),rgba(255,255,255,.22) 0);display:grid;place-items:center;box-shadow:0 3px 8px rgba(0,0,0,.25)}
+  .t3 .ring::after{content:attr(data-p) "%";width:42px;height:42px;border-radius:50%;background:rgba(18,60,90,.85);display:grid;place-items:center;font-size:.72rem;font-weight:800;color:#fff}
+  .t3.gold .ring::after{background:rgba(90,60,10,.85)}
+  .quick{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px}
+  .quick a,.quick button{flex:1;min-width:150px;text-decoration:none;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px;box-shadow:var(--shadow);color:var(--ink);display:flex;align-items:center;gap:10px;font-weight:700;font-size:.92rem;cursor:pointer;font-family:inherit}
+  .quick a:hover,.quick button:hover{border-color:var(--brand-2)}
+  .quick .ic{font-size:1.3rem}
+  .quick .n{margin-inline-start:auto;background:var(--brand-soft);color:var(--brand);border-radius:12px;padding:1px 9px;font-size:.8rem}
+  .quick .n.bad{background:var(--bad-soft);color:var(--bad)}
+  .quick .n.warn{background:var(--warn-soft);color:var(--warn)}
+  .home-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:12px}
+  .feed{list-style:none}
+  .feed li{display:flex;gap:10px;padding:8px 0;border-bottom:1px solid var(--line);font-size:.86rem;align-items:flex-start}
+  .feed .fi{font-size:1.1rem;flex:none}
+  .feed .ft{flex:1}
+  .feed .ft b a{text-decoration:none;color:var(--brand)}
+  .feed small{color:var(--muted);display:block}
+  @media (max-width:640px){.t3 .num{font-size:1.9rem}.t3{min-height:130px}}
+
   /* --- כרטיס מקווה --- */
   .back{display:inline-flex;align-items:center;gap:6px;margin-bottom:10px;font-size:.88rem;text-decoration:none;font-weight:700}
   .card-head{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px;box-shadow:var(--shadow);margin-bottom:12px}
@@ -312,7 +355,8 @@
       </div>
     </div>
     <nav id="nav">
-      <a href="#/" data-view="list">מקוואות <span class="n" id="navCountList"></span></a>
+      <a href="#/" data-view="home">🏠 דף הבית</a>
+      <a href="#/list" data-view="list">מקוואות <span class="n" id="navCountList"></span></a>
       <a href="#/tasks" data-view="tasks">משימות פתוחות <span class="n" id="navCountTasks"></span></a>
       <a href="#/whatsapp" data-view="whatsapp">דיווחי וואטסאפ <span class="n" id="navCountWa"></span></a>
       <a href="#/plan" data-view="plan">תכנון עבודה <span class="n" id="navCountPlan"></span></a>
@@ -325,6 +369,9 @@
 </header>
 
 <main>
+  <!-- ===== דף הבית ===== -->
+  <section class="view" id="view-home"></section>
+
   <!-- ===== רשימת מקוואות ===== -->
   <section class="view" id="view-list">
     <div class="toolbar">
