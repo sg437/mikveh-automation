@@ -65,6 +65,15 @@ function apiHandle_(e, action) {
     }
     if (action === 'ping') return jsonResponse_(apiPing_());
     if (action === 'whatsapp') return jsonResponse_({ whatsapp: apiWhatsapp_() });
+    if (action === 'messages') return jsonResponse_({ messages: apiMessages_(apiSpreadsheet_(), (e.parameter && e.parameter.since) || '') });
+    if (action === 'sync') {
+      const ss = apiSpreadsheet_();
+      const ids = {};
+      apiMikvaot_(ss).forEach(function (m) { ids[apiNorm_(m.name)] = m.id; });
+      const work = apiWork_(ss);
+      work.forEach(function (w) { const mid = ids[apiNorm_(w.mikveh)]; if (mid) w.mikvehId = mid; });
+      return jsonResponse_({ messages: apiMessages_(ss, (e.parameter && e.parameter.since) || ''), work: work });
+    }
     if (action === 'data') return jsonResponse_(apiBuildData_());
     return jsonResponse_({ error: 'unknown action: ' + action });
   } catch (err) {
@@ -86,11 +95,16 @@ function apiPing_() {
   return out;
 }
 
-/** בונה את כל חבילת הנתונים. */
-function apiBuildData_() {
+/** גיליון המקוואות (לפי MIKVAOT_SHEET_ID). */
+function apiSpreadsheet_() {
   const id = getProp_(API.SHEET_ID_PROP);
   if (!id) throw new Error('המאפיין MIKVAOT_SHEET_ID לא מוגדר ב-Script Properties');
-  const ss = SpreadsheetApp.openById(id);
+  return SpreadsheetApp.openById(id);
+}
+
+/** בונה את כל חבילת הנתונים. */
+function apiBuildData_() {
+  const ss = apiSpreadsheet_();
 
   const mikvaot = apiMikvaot_(ss);
   const actions = apiActions_(ss);
@@ -98,11 +112,13 @@ function apiBuildData_() {
   const tasks = apiTasks_(ss);
   const plugs = apiPlugs_(ss);
   const whatsapp = apiWhatsapp_();
+  const messages = apiMessages_(ss, '');
+  const work = apiWork_(ss);
 
   // קישור לפי שם מקווה מנורמל
   const ids = {};
   mikvaot.forEach(function (m) { ids[apiNorm_(m.name)] = m.id; });
-  [actions, inspections, tasks, whatsapp].forEach(function (coll) {
+  [actions, inspections, tasks, whatsapp, messages, work].forEach(function (coll) {
     coll.forEach(function (rec) {
       const mid = ids[apiNorm_(rec.mikveh)];
       if (mid) rec.mikvehId = mid;
@@ -116,10 +132,10 @@ function apiBuildData_() {
       exportedAt: new Date().toISOString(),
       source: 'sheet',
       spreadsheet: ss.getName(),
-      counts: { mikvaot: mikvaot.length, actions: actions.length, inspections: inspections.length, tasks: tasks.length, whatsapp: whatsapp.length },
+      counts: { mikvaot: mikvaot.length, actions: actions.length, inspections: inspections.length, tasks: tasks.length, whatsapp: whatsapp.length, messages: messages.length },
       fieldLabels: labels,
     },
-    mikvaot: mikvaot, actions: actions, inspections: inspections, tasks: tasks, plugs: plugs, whatsapp: whatsapp,
+    mikvaot: mikvaot, actions: actions, inspections: inspections, tasks: tasks, plugs: plugs, whatsapp: whatsapp, messages: messages, work: work,
   };
 }
 

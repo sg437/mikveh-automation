@@ -73,6 +73,11 @@ function doPost(e) {
       return jsonResponse_({ status: 'ignored', reason: 'no body' });
     }
 
+    // ★ כתיבה מהאפליקציה האחודה (?action=...) — מטופלת ב-ApiWrite.js עם טוקן משלה.
+    //   Green API לעולם לא שולח פרמטר action, ולכן הקולט לא מושפע.
+    const apiAction = (e.parameter && e.parameter.action) || '';
+    if (apiAction) return apiWritePost_(e, apiAction);
+
     // ★ שכבת אבטחה: אימות טוקן סודי מהכתובת (?token=...).
     //   נאכפת רק כאשר מוגדר WEBHOOK_TOKEN ב-Script Properties —
     //   וכך אפשר לפרוס בלי שום הפסקת שירות.

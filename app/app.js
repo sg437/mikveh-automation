@@ -32,15 +32,80 @@
         .then((r) => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json().then((d) => [d, r.headers.get('X-From-Cache') === '1']); })
         .then(([d, cached]) => { if (d.error) throw new Error(d.error); d.source = cached ? 'cached' : 'live'; return d; })
         .catch((err) => { console.warn('טעינה מהגיליון נכשלה, עובדים מהעותק המקומי:', err); return fallback(err); });
+    },
+    /** כתיבה לגיליון דרך ApiWrite.js. גוף text/plain כדי להימנע מ-preflight. */
+    post: function (action, data) {
+      const url = this.url(action);
+      if (!url) return Promise.reject(new Error('אין חיבור לגיליון – יש להגדיר apiUrl בקובץ config.js'));
+      if (!navigator.onLine) return Promise.reject(new Error('אין חיבור לאינטרנט'));
+      return fetch(url, { method: 'POST', redirect: 'follow', cache: 'no-store', body: JSON.stringify({ action, user: getUser(), data }) })
+        .then((r) => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+        .then((d) => { if (d.error) throw new Error(d.error); return d; });
     }
   };
+
+  // ============================================================ המשתמש במכשיר הזה
+  function getUser() {
+    try { return JSON.parse(localStorage.getItem('mikveh.user') || '{}'); } catch (e) { return {}; }
+  }
+  function setUser(u) {
+    try { localStorage.setItem('mikveh.user', JSON.stringify(u)); } catch (e) { /* ignore */ }
+    const b = $('#btnUser'); if (b) b.textContent = u.name ? '👤 ' + u.name : '👤 מי אני?';
+  }
+  let userCb = null;
+  function openUserModal(cb) {
+    userCb = cb || null;
+    const u = getUser();
+    $('#uName').value = u.name || ''; $('#uPhone').value = u.phone || '';
+    $('#userModal').hidden = false; setTimeout(() => $('#uName').focus(), 50);
+  }
+  /** מחזיר true אם יש שם משתמש; אחרת פותח את חלון ההזדהות ומחזיר false. */
+  function requireUser() {
+    if (getUser().name) return true;
+    toast('קודם נגדיר מי אתה (פעם אחת במכשיר הזה)');
+    openUserModal(null);
+    return false;
+  }
+  function initUser() {
+    setUser(getUser());
+    $('#btnUser').addEventListener('click', () => openUserModal(null));
+    $('#userClose').addEventListener('click', () => { $('#userModal').hidden = true; });
+    $('#userForm').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const u = { name: $('#uName').value.trim(), phone: $('#uPhone').value.trim() };
+      if (!u.name) return;
+      setUser(u); $('#userModal').hidden = true;
+      toast('שלום ' + u.name);
+      if (userCb) { const cb = userCb; userCb = null; cb(u); }
+    });
+  }
+
+  // ============================================================ הודעה קופצת
+  let toastTimer = null;
+  function toast(text) {
+    const t = $('#toast'); t.textContent = text; t.hidden = false;
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, 3500);
+  }
+
+  /** הוספת פעולה שנרשמה עכשיו (מהטופס) לנתונים המקומיים ורענון האינדקסים. */
+  function addAction(rec) {
+    S.data.actions.push(rec);
+    rebuild();
+  }
+  function rebuild() {
+    S.byId = {}; S.actions = {}; S.insp = {}; S.tasks = {}; S.plugs = {}; S.wa = {}; S.derived = {};
+    buildIndexes(S.data);
+  }
 
   const FORMS = [
     { key: 'inspection', icon: '📋', title: 'דו"ח פיקוח', desc: 'ביקורת הלכתית מלאה: גג, מאגר, אוצרות, בור טבילה, טכני', url: 'https://goo.gl/forms/u96Zky0MJzGuswGC3' },
     { key: 'reservoir', icon: '🌧', title: 'ריקון מאגר', desc: 'ריקון והחלפת מי גשמים במאגר', url: 'https://goo.gl/forms/oS2LeXLB00B7rnUs2' },
     { key: 'zeria', icon: '🔄', title: 'החלפת אוצר זריעה', desc: 'ריקון, איטום ומילוי אוצר הזריעה', url: 'https://goo.gl/forms/ZrVkRw29lhalbuPJ2' },
     { key: 'hashaka', icon: '🔁', title: 'החלפת אוצר השקה', desc: 'ריקון, איטום ומילוי אוצר ההשקה', url: 'https://goo.gl/forms/NUr4QBhyq6zonxu63' },
-    { key: 'bor', icon: '🛠', title: 'טיפול בור טבילה', desc: 'טיפול ותיקונים בבור הטבילה', url: 'https://goo.gl/forms/Ykm1PFoyCLnCf2U73' },
+    { key: 'repair', icon: '🛠', title: 'טיפול / תיקון', desc: 'טיפול בבור הטבילה, באוצרות, במאגר או בגג', url: 'https://goo.gl/forms/Ykm1PFoyCLnCf2U73' },
+    { key: 'cert', icon: '📜', title: 'חידוש תעודה', desc: 'תעודת כשרות חדשה עם תוקף לשנה', url: 'https://goo.gl/forms/ZrVkRw29lhalbuPJ2' },
+    { key: 'visit', icon: '👣', title: 'ביקור כשרות', desc: 'ביקור שוטף ללא דוח מלא', url: 'https://goo.gl/forms/u96Zky0MJzGuswGC3' },
+    { key: 'plug', icon: '🔌', title: 'פקק על הגג', desc: 'הנחת פקק לפתיחת המאגר לגשם', url: 'https://goo.gl/forms/oS2LeXLB00B7rnUs2' },
   ];
 
   // ============================================================ עזרים
@@ -184,6 +249,10 @@
       renderWhatsappView(); $('#view-whatsapp').classList.add('on');
     } else if (view === 'plan') {
       renderPlan(parts[1]); $('#view-plan').classList.add('on');
+    } else if (view === 'talk') {
+      if (window.MikvehTalk) MikvehTalk.renderView(parts[1] || ''); $('#view-talk').classList.add('on');
+    } else if (view === 'work') {
+      if (window.MikvehWork) MikvehWork.renderView(parts[1] || ''); $('#view-work').classList.add('on');
     } else {
       $('#view-list').classList.add('on');
     }
@@ -331,7 +400,8 @@
 
     const tabs = [
       ['details', 'פרטים'], ['otzarot', 'אוצרות ומאגר'], ['history', 'היסטוריית פעולות', acts.length],
-      ['inspections', 'דוחות פיקוח', ins.length], ['tasks', 'משימות', tasks.length + plugs.length], ['whatsapp', 'דיווחי וואטסאפ', (S.wa[m.id] || []).length],
+      ['inspections', 'דוחות פיקוח', ins.length], ['tasks', 'משימות', tasks.length + plugs.length + (window.MikvehWork ? MikvehWork.forMikveh(m.id).length : 0)],
+      ['talk', 'דיון', (S.data.messages || []).filter((x) => x.mikvehId === m.id).length], ['whatsapp', 'דיווחי וואטסאפ', (S.wa[m.id] || []).length],
     ];
     const tabBar = '<div class="tabs">' + tabs.map(([k, t, n]) =>
       '<button type="button" data-tab="' + k + '" class="' + (k === tab ? 'on' : '') + '">' + t + (n != null ? '<span class="n">' + n + '</span>' : '') + '</button>').join('') + '</div>';
@@ -341,7 +411,8 @@
       otzarot: renderOtzarot(m, li, plugs),
       history: renderHistory(acts),
       inspections: renderInspections(ins),
-      tasks: renderCardTasks(tasks, plugs),
+      tasks: (window.MikvehWork ? MikvehWork.renderCardPane(m) : '') + renderCardTasks(tasks, plugs),
+      talk: window.MikvehTalk ? MikvehTalk.renderPane(m) : '',
       whatsapp: renderWhatsapp(S.wa[m.id] || [], m),
     };
     root.innerHTML = head + tabBar + Object.keys(panes).map((k) => '<div class="pane ' + (k === tab ? 'on' : '') + '" data-pane="' + k + '">' + panes[k] + '</div>').join('');
@@ -352,6 +423,8 @@
       root.querySelectorAll('.pane').forEach((p) => p.classList.toggle('on', p.dataset.pane === b.dataset.tab));
     }));
     $('#cardReport').addEventListener('click', () => openReport(m));
+    if (window.MikvehTalk) MikvehTalk.bindPane(root, m);
+    if (window.MikvehWork) MikvehWork.bindCardPane(root, m);
     root.querySelectorAll('[data-export]').forEach((b) => b.addEventListener('click', () => {
       if (b.dataset.export === 'history') exportActions(acts, m.name);
       else exportInspections(ins, m.name);
@@ -685,6 +758,11 @@
     out.sort((a, b) => (b.drain.ts || '').localeCompare(a.drain.ts || ''));
     return out;
   }
+  function workBadge(mid) {
+    const w = (S.data.work || []).filter((x) => x.mikvehId === mid && x.status !== 'done');
+    if (!w.length) return '';
+    return ' ' + w.map((x) => badge(x.status === 'taken' ? 'נלקח: ' + (x.takenBy || '') : 'פתוח לחלוקה', x.status === 'taken' ? 'brand' : 'warn')).join(' ');
+  }
   function dueCell(c) {
     if (c.expired) return '<span class="due-bad">פג תוקף לפני ' + Math.abs(Math.round((new Date() - c.start) / 86400000)) + ' ימים</span>';
     if (c.days <= 0) return '<span class="due-warn">פג החודש</span>';
@@ -714,7 +792,8 @@
       $('#btnExportCerts').addEventListener('click', () => exportTable(PLAN.certsShown.map((c) => ({ 'מקווה': c.m.name, 'מועצה': c.m.council || '', 'איזור': c.m.region || '', 'תוקף תעודה': c.m.certificate, 'מצב': c.expired ? 'פג תוקף' : 'בעוד ' + c.days + ' ימים', 'תאריך לועזי (תחילת חודש)': fmtDate(c.start.toISOString()), 'חידוש אחרון': c.lastCert ? hebOf(c.lastCert.ts) : '', 'רב מחדש אחרון': c.lastCert ? (c.lastCert.rabbi || '') : '', 'בלנית': c.m.attendant || '', 'טלפון': c.m.phone || '', 'טלפון מקווה': c.m.mikvehPhone || '', 'כתובת': c.m.address || '', 'שיבוץ': '' })), 'תעודות לחידוש', 'certificates-due'));
       $('#btnExportDrained').addEventListener('click', () => exportTable(PLAN.drainedShown.map((d) => ({ 'מקווה': d.m.name, 'מועצה': d.m.council || '', 'איזור': d.m.region || '', 'תאריך ריקון': hebOf(d.drain.ts), 'תאריך לועזי': fmtDate(d.drain.ts), 'ימים מאז הריקון': d.days, 'מי רוקן': d.drain.rabbi || '', 'פקק על הגג': d.plug ? hebOf(d.plug.ts) : '', 'אוצר זריעה': d.m.otzarZeria || '', 'אוצר השקה': d.m.otzarHashaka || '', 'בלנית': d.m.attendant || '', 'טלפון': d.m.phone || '', 'כתובת': d.m.address || '', 'שיבוץ': '' })), 'ממתינים למילוי', 'drained-reservoirs'));
       $('#btnExportPlanned').addEventListener('click', () => exportTasks(PLAN.plannedShown || []));
-      ['certTable', 'drainTable', 'plannedTable'].forEach((id) => $('#' + id).addEventListener('click', (e) => { const tr = e.target.closest('tr.link'); if (tr && tr.dataset.id) location.hash = '#/m/' + encodeURIComponent(tr.dataset.id) + (id === 'certTable' ? '/history' : '/otzarot'); }));
+      ['certTable', 'drainTable', 'plannedTable'].forEach((id) => $('#' + id).addEventListener('click', (e) => { if (e.target.closest('.selcol')) return; const tr = e.target.closest('tr.link'); if (tr && tr.dataset.id) location.hash = '#/m/' + encodeURIComponent(tr.dataset.id) + (id === 'certTable' ? '/history' : '/otzarot'); }));
+      if (window.MikvehWork) MikvehWork.initPlanSelection();
       $('#planCountCerts').textContent = PLAN.certs.filter((c) => c.expired || c.days <= 92).length;
       $('#planCountDrained').textContent = PLAN.drained.length;
       $('#planCountPlanned').textContent = PLAN.planned.length;
@@ -733,8 +812,8 @@
     const list = base.filter((c) => certFilter(c, PLAN.certChip));
     PLAN.certsShown = list;
     $('#certSummary').innerHTML = '<b>' + list.length + '</b> מקוואות · לחיצה על שורה פותחת את הכרטיס';
-    $('#certTable').innerHTML = '<thead><tr><th>מקווה</th><th>מועצה</th><th>איזור</th><th>תוקף תעודה</th><th>מצב</th><th>חידוש אחרון</th><th>בלנית</th><th>טלפון</th></tr></thead><tbody>' +
-      (list.length ? list.map((c) => '<tr class="link" data-id="' + esc(c.m.id) + '"><td>' + esc(c.m.name) + '</td><td>' + esc(c.m.council || '') + '</td><td>' + esc(c.m.region || '') + '</td><td>' + esc(c.m.certificate) + '<br><small>' + esc(fmtDate(c.start.toISOString())) + '</small></td><td>' + dueCell(c) + '</td><td>' + (c.lastCert ? esc(hebOf(c.lastCert.ts)) + '<br><small>' + esc(c.lastCert.rabbi || '') + '</small>' : '') + '</td><td>' + esc(c.m.attendant || '') + '</td><td>' + tel(c.m.phone) + '</td></tr>').join('') : '<tr><td colspan="8" class="empty">אין תעודות בקטגוריה זו</td></tr>') + '</tbody>';
+    $('#certTable').innerHTML = '<thead><tr><th class="selcol"><input type="checkbox" class="selall" title="בחר הכל"></th><th>מקווה</th><th>מועצה</th><th>איזור</th><th>תוקף תעודה</th><th>מצב</th><th>חידוש אחרון</th><th>בלנית</th><th>טלפון</th></tr></thead><tbody>' +
+      (list.length ? list.map((c) => '<tr class="link" data-id="' + esc(c.m.id) + '"><td class="selcol"><input type="checkbox" class="sel" value="' + esc(c.m.id) + '"></td><td>' + esc(c.m.name) + workBadge(c.m.id) + '</td><td>' + esc(c.m.council || '') + '</td><td>' + esc(c.m.region || '') + '</td><td>' + esc(c.m.certificate) + '<br><small>' + esc(fmtDate(c.start.toISOString())) + '</small></td><td>' + dueCell(c) + '</td><td>' + (c.lastCert ? esc(hebOf(c.lastCert.ts)) + '<br><small>' + esc(c.lastCert.rabbi || '') + '</small>' : '') + '</td><td>' + esc(c.m.attendant || '') + '</td><td>' + tel(c.m.phone) + '</td></tr>').join('') : '<tr><td colspan="9" class="empty">אין תעודות בקטגוריה זו</td></tr>') + '</tbody>';
   }
   function drawDrained() {
     const region = $('#drainRegion').value;
@@ -744,8 +823,8 @@
     const list = base.filter((d) => f(d, PLAN.drainChip));
     PLAN.drainedShown = list;
     $('#drainSummary').innerHTML = '<b>' + list.length + '</b> מאגרים שרוקנו ועדיין לא נרשמה אחריהם החלפת/מילוי אוצר';
-    $('#drainTable').innerHTML = '<thead><tr><th>מקווה</th><th>מועצה</th><th>איזור</th><th>תאריך ריקון</th><th>ימים</th><th>מי רוקן</th><th>פקק על הגג</th><th>אוצרות</th><th>בלנית</th></tr></thead><tbody>' +
-      (list.length ? list.map((d) => '<tr class="link" data-id="' + esc(d.m.id) + '"><td>' + esc(d.m.name) + (d.task ? ' ' + badge('משימה: ' + (d.task.priority || ''), d.task.priority === 'דחוף' ? 'bad' : 'warn') : '') + '</td><td>' + esc(d.m.council || '') + '</td><td>' + esc(d.m.region || '') + '</td><td>' + esc(hebOf(d.drain.ts)) + '<br><small>' + esc(fmtDate(d.drain.ts)) + '</small></td><td>' + d.days + '</td><td>' + esc(d.drain.rabbi || '') + '</td><td>' + (d.plug ? badge(hebOf(d.plug.ts), 'brand') : '') + '</td><td>' + [d.m.otzarZeria ? 'זריעה: ' + d.m.otzarZeria : '', d.m.otzarHashaka ? 'השקה: ' + d.m.otzarHashaka : ''].filter(Boolean).map(esc).join('<br>') + '</td><td>' + esc(d.m.attendant || '') + (d.m.phone ? '<br>' + tel(d.m.phone) : '') + '</td></tr>').join('') : '<tr><td colspan="9" class="empty">אין מאגרים ממתינים</td></tr>') + '</tbody>';
+    $('#drainTable').innerHTML = '<thead><tr><th class="selcol"><input type="checkbox" class="selall" title="בחר הכל"></th><th>מקווה</th><th>מועצה</th><th>איזור</th><th>תאריך ריקון</th><th>ימים</th><th>מי רוקן</th><th>פקק על הגג</th><th>אוצרות</th><th>בלנית</th></tr></thead><tbody>' +
+      (list.length ? list.map((d) => '<tr class="link" data-id="' + esc(d.m.id) + '"><td class="selcol"><input type="checkbox" class="sel" value="' + esc(d.m.id) + '"></td><td>' + esc(d.m.name) + workBadge(d.m.id) + (d.task ? ' ' + badge('משימה: ' + (d.task.priority || ''), d.task.priority === 'דחוף' ? 'bad' : 'warn') : '') + '</td><td>' + esc(d.m.council || '') + '</td><td>' + esc(d.m.region || '') + '</td><td>' + esc(hebOf(d.drain.ts)) + '<br><small>' + esc(fmtDate(d.drain.ts)) + '</small></td><td>' + d.days + '</td><td>' + esc(d.drain.rabbi || '') + '</td><td>' + (d.plug ? badge(hebOf(d.plug.ts), 'brand') : '') + '</td><td>' + [d.m.otzarZeria ? 'זריעה: ' + d.m.otzarZeria : '', d.m.otzarHashaka ? 'השקה: ' + d.m.otzarHashaka : ''].filter(Boolean).map(esc).join('<br>') + '</td><td>' + esc(d.m.attendant || '') + (d.m.phone ? '<br>' + tel(d.m.phone) : '') + '</td></tr>').join('') : '<tr><td colspan="10" class="empty">אין מאגרים ממתינים</td></tr>') + '</tbody>';
   }
   function drawPlanned() {
     const type = $('#plannedType').value, region = $('#plannedRegion').value;
@@ -759,7 +838,7 @@
 
   // ============================================================ טפסים
   function renderForms() {
-    $('#formsList').innerHTML = FORMS.map((f) => '<a class="form-link" href="' + f.url + '" target="_blank" rel="noopener"><b>' + esc(f.title) + '</b><small>' + esc(f.desc) + '</small></a>').join('');
+    $('#formsList').innerHTML = FORMS.filter((f) => ['inspection', 'reservoir', 'zeria', 'hashaka', 'repair'].includes(f.key)).map((f) => '<a class="form-link" href="' + f.url + '" target="_blank" rel="noopener"><b>' + esc(f.title) + '</b><small>' + esc(f.desc) + '</small></a>').join('');
   }
 
   // ============================================================ ייצוא לאקסל
@@ -845,15 +924,24 @@
   }
 
   // ============================================================ חלון דיווח / עדכון
-  const RM = { chosen: null, sel: 0, matches: [] };
-  function openReport(m) {
-    RM.chosen = m || null;
+  const RM = { chosen: null, sel: 0, matches: [], pickCb: null };
+  function openReport(m, formKey) {
+    RM.chosen = m || null; RM.pickCb = null;
+    $('#reportTitle').textContent = 'דיווח / עדכון';
     $('#reportModal').hidden = false;
+    if (m && formKey && window.MikvehForms) { rmShowStep2(); MikvehForms.open(formKey, m); return; }
     if (m) rmShowStep2(); else { rmShowStep1(); }
   }
-  function closeReport() { $('#reportModal').hidden = true; }
+  /** בחירת מקווה בלבד (למשל לפתיחת דיון): פותח את חלון החיפוש ומחזיר את המקווה ל-cb. */
+  function pickMikveh(cb) {
+    RM.chosen = null; RM.pickCb = cb;
+    $('#reportTitle').textContent = 'בחירת מקווה';
+    $('#reportModal').hidden = false;
+    rmShowStep1();
+  }
+  function closeReport() { $('#reportModal').hidden = true; $('#rmStep3').hidden = true; RM.pickCb = null; }
   function rmShowStep1() {
-    $('#rmStep1').hidden = false; $('#rmStep2').hidden = true;
+    $('#rmStep1').hidden = false; $('#rmStep2').hidden = true; $('#rmStep3').hidden = true;
     $('#rmName').value = ''; rmSearch(''); setTimeout(() => $('#rmName').focus(), 50);
   }
   function rmSearch(q) {
@@ -871,14 +959,19 @@
     list.innerHTML = RM.matches.length ? RM.matches.map((m, i) => '<button type="button" data-i="' + i + '" class="' + (i === 0 ? 'sel' : '') + '"><span>' + esc(m.name) + '</span><small>' + esc([m.council, m.region].filter(Boolean).join(' · ')) + '</small></button>').join('') +
       (scored.length > 10 ? '<div class="hint">ועוד ' + (scored.length - 10) + ' תוצאות, המשך להקליד</div>' : '') : '<div class="hint">לא נמצא מקווה מתאים</div>';
   }
-  function rmChoose(m) { RM.chosen = m; rmShowStep2(); }
+  function rmChoose(m) {
+    RM.chosen = m;
+    if (RM.pickCb) { const cb = RM.pickCb; closeReport(); cb(m); return; }
+    rmShowStep2();
+  }
   function rmShowStep2() {
     const m = RM.chosen;
-    $('#rmStep1').hidden = true; $('#rmStep2').hidden = false;
+    $('#rmStep1').hidden = true; $('#rmStep2').hidden = false; $('#rmStep3').hidden = true;
     $('#rmChosenName').textContent = m.name;
     $('#rmChosenSub').textContent = [m.council, m.region, m.address].filter(Boolean).join(' · ');
     $('#rmActions').innerHTML = FORMS.map((f) => '<button type="button" data-form="' + f.key + '"><span class="ic">' + f.icon + '</span>' + esc(f.title) + '<small>' + esc(f.desc) + '</small></button>').join('') +
       '<button type="button" class="card" data-form="card"><span class="ic">📁</span>פתיחת הכרטיס<small>כל הנתונים של המקווה</small></button>';
+    $('#rmNote').hidden = !!DataSource.url('data');
   }
   function initReport() {
     $('#btnReport').addEventListener('click', () => openReport(null));
@@ -898,7 +991,8 @@
       const m = RM.chosen;
       if (b.dataset.form === 'card') { closeReport(); location.hash = '#/m/' + encodeURIComponent(m.id); return; }
       const f = FORMS.find((x) => x.key === b.dataset.form);
-      window.open(f.url, '_blank', 'noopener');
+      if (window.MikvehForms && DataSource.url('data')) MikvehForms.open(f.key, m);
+      else window.open(f.url, '_blank', 'noopener');
     });
   }
   function rmHighlight() { $('#rmList').querySelectorAll('button[data-i]').forEach((b, i) => b.classList.toggle('sel', i === RM.sel)); }
@@ -920,8 +1014,13 @@
     $('#btnReload').addEventListener('click', () => location.reload());
     $('#footer').textContent = (data.source === 'live' || data.source === 'cached' ? 'מקור הנתונים: ' + (data.meta.spreadsheet || 'הגיליון החי') : 'מקור הנתונים: עותק מקומי של הגיליון') +
       ' (' + data.mikvaot.length + ' מקוואות, ' + data.actions.length + ' פעולות, ' + data.inspections.length + ' דוחות פיקוח, ' + (data.whatsapp || []).length + ' דיווחי וואטסאפ). גרסת מערכת 0.2';
+    window.MK = { S, $, esc, hebOf, fmtDate, parseISO, badge, tel, findByName, DataSource, route, buildIndexes: rebuild, addAction, getUser, requireUser, openUserModal, toast, openReport, closeReport, pickMikveh, exportTable, uniq, fillSelect, certRows, drainedRows };
+    data.messages = data.messages || []; data.work = data.work || [];
+    $('#navCountTalk').textContent = data.messages.length;
+    $('#navCountWork').textContent = data.work.filter((w) => w.status !== 'done').length;
     initList();
     initReport();
+    initUser();
     window.addEventListener('hashchange', route);
     route();
     if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {

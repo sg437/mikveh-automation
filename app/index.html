@@ -210,6 +210,64 @@
   .rm-grid button small{font-weight:400;color:var(--muted);font-size:.74rem}
   .rm-grid button.card{border-style:dashed}
   .panel-tools{display:flex;justify-content:flex-end;margin-bottom:8px}
+  .user-btn{background:transparent;color:#fff;border-color:rgba(255,255,255,.4)}
+  .toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 18px;border-radius:10px;font-size:.9rem;z-index:80;box-shadow:0 6px 18px rgba(0,0,0,.25);max-width:90vw}
+  .modal{max-height:88vh;overflow-y:auto}
+  /* --- טפסים --- */
+  .rform .fgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:10px 16px}
+  .rform .ff{display:flex;flex-direction:column;gap:4px}
+  .rform .ff.wide{grid-column:1/-1}
+  .rform label,.rform .lbl{font-size:.8rem;font-weight:700;color:var(--muted)}
+  .rform input,.rform select,.rform textarea{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:7px;font-size:.95rem}
+  .rform .heb{color:var(--brand);font-weight:700;font-size:.8rem}
+  .rform .req{color:var(--bad)}
+  .pills{display:flex;gap:6px;flex-wrap:wrap}
+  .pill{border:1px solid var(--line);border-radius:20px;padding:4px 11px;font-size:.82rem;cursor:pointer;background:#fff;display:inline-flex;align-items:center;position:relative}
+  .pill input{position:absolute;opacity:0;width:0;height:0}
+  .pill:has(input:checked){background:var(--brand);color:#fff;border-color:var(--brand)}
+  .pill.p1:has(input:checked){background:var(--warn);border-color:var(--warn)}
+  .pill.p2:has(input:checked){background:var(--bad);border-color:var(--bad)}
+  .pill.p0:has(input:checked){background:var(--ok);border-color:var(--ok)}
+  .fsec{border:1px solid var(--line);border-radius:8px;margin-top:10px}
+  .fsec summary{cursor:pointer;padding:9px 12px;font-weight:800;color:var(--brand);background:var(--brand-soft);list-style:none}
+  .fsec summary::-webkit-details-marker{display:none}
+  .fsec .fgrid{padding:12px}
+  .factions{display:flex;align-items:center;gap:12px;margin-top:14px}
+  .fmsg{font-size:.85rem;color:var(--muted)}.fmsg.ok{color:var(--ok);font-weight:700}.fmsg.bad{color:var(--bad);font-weight:700}
+  /* --- דיונים --- */
+  .talk{display:grid;grid-template-columns:260px 1fr;gap:14px;align-items:start}
+  .chlist{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:8px;position:sticky;top:120px}
+  .chhead{display:flex;justify-content:space-between;align-items:center;padding:4px 6px 8px;gap:6px}
+  .ch{display:flex;justify-content:space-between;align-items:center;gap:6px;padding:8px 10px;border-radius:8px;text-decoration:none;color:var(--ink);font-size:.9rem}
+  .ch small{color:var(--muted);font-size:.72rem;white-space:nowrap}
+  .ch:hover{background:var(--gray-soft)}.ch.on{background:var(--brand);color:#fff}.ch.on small{color:#D6E2EC}
+  .chmain{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px}
+  .chtitle{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;border-bottom:1px solid var(--line);padding-bottom:8px;margin-bottom:8px}
+  .chtitle h2{font-size:1.1rem;color:var(--brand)}
+  .chtitle .sub{font-size:.8rem;color:var(--muted)}
+  .thread{max-height:60vh;overflow-y:auto;display:flex;flex-direction:column;gap:8px;padding:4px 0}
+  .msg{background:var(--gray-soft);border-radius:12px;padding:8px 12px;max-width:85%;align-self:flex-start}
+  .msg.me{background:var(--brand-soft);align-self:flex-end}
+  .msg .mh{display:flex;justify-content:space-between;gap:10px;font-size:.78rem;color:var(--muted)}
+  .msg .mh b{color:var(--brand)}
+  .msg .mb{font-size:.93rem;margin-top:3px;white-space:pre-wrap}
+  .msg .mq{border-inline-start:3px solid var(--brand-2);padding:3px 8px;margin-top:4px;font-size:.78rem;color:var(--muted);background:#fff;border-radius:4px}
+  .msg .ma{text-align:left}
+  .msg.sys{background:transparent;border:1px dashed var(--line);align-self:center;max-width:95%;font-size:.85rem}
+  .lnk{background:none;border:none;color:var(--brand-2);font-size:.76rem;padding:0;cursor:pointer}
+  .composer{margin-top:10px;border-top:1px solid var(--line);padding-top:10px}
+  .composer textarea{width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px;font-size:.95rem}
+  .composer .crow{display:flex;gap:10px;align-items:center;margin-top:6px}
+  .replybox{background:var(--brand-soft);border-radius:6px;padding:5px 10px;font-size:.8rem;margin-bottom:6px}
+  /* --- חלוקת עבודה --- */
+  .wgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px}
+  .wcard{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:12px 14px;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:6px;border-inline-start:5px solid var(--line)}
+  .wcard.open{border-inline-start-color:var(--warn)}.wcard.taken{border-inline-start-color:var(--brand-2)}.wcard.done{border-inline-start-color:var(--ok);opacity:.75}
+  .wcard h4{font-size:1rem;font-weight:800}
+  .wcard .wl{font-size:.8rem;color:var(--muted)}
+  .wcard .wb{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px}
+  .selcol{width:28px}
+  @media (max-width:760px){.talk{grid-template-columns:1fr}.chlist{position:static}}
 
   @media (max-width:640px){
     .timeline li{grid-template-columns:1fr}
@@ -230,6 +288,7 @@
       </div>
       <div class="head-actions">
         <button class="btn report-btn" id="btnReport" type="button">＋ דיווח / עדכון</button>
+        <button class="btn user-btn" id="btnUser" type="button">👤</button>
         <div class="head-meta" id="headMeta"></div>
       </div>
     </div>
@@ -238,6 +297,8 @@
       <a href="#/tasks" data-view="tasks">משימות פתוחות <span class="n" id="navCountTasks"></span></a>
       <a href="#/whatsapp" data-view="whatsapp">דיווחי וואטסאפ <span class="n" id="navCountWa"></span></a>
       <a href="#/plan" data-view="plan">תכנון עבודה <span class="n" id="navCountPlan"></span></a>
+      <a href="#/work" data-view="work">חלוקת עבודה <span class="n" id="navCountWork"></span></a>
+      <a href="#/talk" data-view="talk">דיונים <span class="n" id="navCountTalk"></span></a>
       <a href="#/dashboard" data-view="dashboard">לוח בקרה</a>
       <a href="#/forms" data-view="forms">דיווח וטפסים</a>
     </nav>
@@ -310,6 +371,7 @@
           <div class="field"><label for="certRegion">איזור</label><select id="certRegion"></select></div>
           <div class="field"><label for="certCouncil">מועצה</label><select id="certCouncil"></select></div>
           <button class="btn" id="btnExportCerts" type="button">⬇ ייצוא לאקסל</button>
+          <button class="btn primary" id="btnAssignCerts" type="button">📤 שלח לחלוקת עבודה (<span id="selCerts">0</span>)</button>
         </div>
         <div class="summary"><span id="certSummary"></span></div>
       </div>
@@ -321,6 +383,7 @@
         <div class="row" style="margin-top:8px">
           <div class="field"><label for="drainRegion">איזור</label><select id="drainRegion"></select></div>
           <button class="btn" id="btnExportDrained" type="button">⬇ ייצוא לאקסל</button>
+          <button class="btn primary" id="btnAssignDrained" type="button">📤 שלח לחלוקת עבודה (<span id="selDrained">0</span>)</button>
         </div>
         <div class="summary"><span id="drainSummary"></span></div>
       </div>
@@ -332,6 +395,12 @@
       <div class="tbl-wrap"><table id="plannedTable"></table></div>
     </div>
   </section>
+
+  <!-- ===== חלוקת עבודה ===== -->
+  <section class="view" id="view-work"></section>
+
+  <!-- ===== דיונים ===== -->
+  <section class="view" id="view-talk"></section>
 
   <!-- ===== לוח בקרה ===== -->
   <section class="view" id="view-dashboard"></section>
@@ -358,15 +427,33 @@
       <div id="rmStep2" hidden>
         <div class="rm-chosen"><div><div class="l">מקווה</div><div class="v" id="rmChosenName"></div><div class="s" id="rmChosenSub"></div></div><button class="btn small" id="rmChange" type="button">החלף</button></div>
         <div class="rm-grid" id="rmActions"></div>
-        <div class="note-box" style="margin:12px 0 0">בשלב זה כל כפתור פותח את טופס Google המתאים בחלון חדש. בשלב הבא הטפסים ייפתחו כאן, עם שם המקווה ממולא, ויעדכנו את הכרטיס ישירות בתאריך עברי.</div>
+        <div class="note-box" id="rmNote" style="margin:12px 0 0">אין חיבור חי לגיליון (config.js), לכן כל כפתור פותח את טופס Google המתאים בחלון חדש.</div>
       </div>
+      <div id="rmStep3" hidden></div>
     </div>
   </div>
 </div>
+
+<!-- ===== מי אני (פעם אחת במכשיר) ===== -->
+<div class="modal-bg" id="userModal" hidden>
+  <div class="modal" role="dialog" aria-labelledby="userTitle" style="max-width:420px">
+    <div class="modal-head"><h2 id="userTitle">מי אני?</h2><button class="x" id="userClose" type="button" aria-label="סגירה">✕</button></div>
+    <form class="modal-body" id="userForm">
+      <p style="font-size:.88rem;color:var(--muted);margin-bottom:10px">השם יופיע על כל דיווח, הודעה ושיבוץ ששולחים מהמכשיר הזה.</p>
+      <label for="uName">שם מלא</label><input id="uName" type="text" required autocomplete="name" style="margin-bottom:10px">
+      <label for="uPhone">טלפון (רשות)</label><input id="uPhone" type="tel" autocomplete="tel" style="margin-bottom:14px">
+      <button class="btn primary" type="submit">שמירה</button>
+    </form>
+  </div>
+</div>
+<div class="toast" id="toast" hidden></div>
 
 <script src="config.js"></script>
 <script src="hebdate.js"></script>
 <script src="data.js"></script>
 <script src="app.js"></script>
+<script src="forms.js"></script>
+<script src="talk.js"></script>
+<script src="work.js"></script>
 </body>
 </html>

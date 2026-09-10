@@ -1,0 +1,296 @@
+/************************************************************************
+ * כתיבה מהאפליקציה האחודה לגיליון (ApiWrite.gs)
+ * ========================================================
+ * POST <WebApp URL>?action=<פעולה>&token=<API_TOKEN>
+ * גוף הבקשה (JSON): { user: {name, phone}, data: {...} }
+ *
+ * פעולות:
+ *   addAction     — דיווח פעולה (ריקון מאגר, החלפת אוצר, חידוש תעודה, ביקור, תיקון...)
+ *                   נרשם בלשונית "אוצר זריעה" באותו מבנה של טפסי Google.
+ *   addInspection — דו"ח פיקוח מלא, נרשם בלשונית "פיקוח הלכתי" (79 עמודות, כמו הטופס).
+ *   addMessage    — הודעה בדיון (כללי או על מקווה), נרשמת בלשונית "דיונים"
+ *                   (נוצרת אוטומטית בגיליון המקוואות).
+ *
+ * כל תשובה: { ok: true, record: {...} } או { error: '...' }.
+ * הרשומה המוחזרת באותו מבנה כמו ב-Api.js, כדי שהאפליקציה תציג אותה מיד.
+ ************************************************************************/
+
+const WRITE = {
+  ACTIONS_SHEET: 'אוצר זריעה',
+  RAW_INSPECTION_SHEET: 'פיקוח הלכתי',
+  MESSAGES_SHEET: 'דיונים',
+  MESSAGES_HEADERS: ['מזהה', 'זמן', 'מקווה', 'כותב', 'טלפון', 'טקסט', 'תגובה ל', 'מקור'],
+  WORK_SHEET: 'שיבוצים',
+  WORK_HEADERS: ['מזהה', 'זמן פתיחה', 'סוג', 'מקווה', 'סטטוס', 'נלקח ע"י', 'טלפון', 'זמן לקיחה', 'זמן ביצוע', 'הערה', 'נפתח ע"י'],
+  WORK_LIMIT: 3000,
+  MSG_LIMIT: 3000,
+  INSPECTION_COLS: 79,
+  ACTION_COLS: 22,
+  MAX_TEXT: 4000,
+};
+
+function apiWritePost_(e, action) {
+  try {
+    const token = getProp_(API.TOKEN_PROP);
+    const given = (e.parameter && e.parameter.token) || '';
+    if (token && given !== token) return jsonResponse_({ error: 'unauthorized' });
+
+    const body = JSON.parse(e.postData.contents || '{}');
+    const user = body.user || {};
+    user.name = String(user.name || '').trim().slice(0, 80);
+    user.phone = String(user.phone || '').trim().slice(0, 30);
+    if (!user.name) return jsonResponse_({ error: 'חסר שם משתמש (הגדרות ➜ המשתמש שלי)' });
+    const data = body.data || {};
+
+    const ss = apiSpreadsheet_();
+    const lock = LockService.getScriptLock();
+    lock.waitLock(20000);
+    try {
+      if (action === 'addAction') return jsonResponse_(writeAction_(ss, data, user));
+      if (action === 'addInspection') return jsonResponse_(writeInspection_(ss, data, user));
+      if (action === 'addMessage') return jsonResponse_(writeMessage_(ss, data, user));
+      if (action === 'addWorkItems') return jsonResponse_(addWorkItems_(ss, data, user));
+      if (action === 'updateWorkItem') return jsonResponse_(updateWorkItem_(ss, data, user));
+    } finally {
+      lock.releaseLock();
+    }
+    return jsonResponse_({ error: 'unknown action: ' + action });
+  } catch (err) {
+    return jsonResponse_({ error: String(err && err.message || err) });
+  }
+}
+
+// ==================== עזרים ====================
+
+/** שם המקווה הקנוני מבסיס הנתונים (לפי השוואה מנורמלת), או null. */
+function canonicalMikveh_(ss, name) {
+  const key = apiNorm_(name);
+  if (!key) return null;
+  const sh = ss.getSheetByName(API.SHEETS.master);
+  const last = sh.getLastRow();
+  if (last < 2) return null;
+  const names = sh.getRange(2, 1, last - 1, 1).getValues();
+  for (let i = 0; i < names.length; i++) {
+    const n = apiClean_(names[i][0]);
+    if (n && apiNorm_(n) === key) return n;
+  }
+  return null;
+}
+
+function txt_(v, max) {
+  if (v === null || v === undefined) return '';
+  if (Array.isArray(v)) v = v.filter(Boolean).join(', ');
+  return String(v).trim().slice(0, max || WRITE.MAX_TEXT);
+}
+
+/** "YYYY-MM-DD" (או ISO) -> Date בצהריים (כדי שלא יזוז יום בגלל אזור זמן), אחרת עכשיו. */
+function dateOf_(s) {
+  const m = String(s || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) return new Date();
+  const d = new Date(+m[1], +m[2] - 1, +m[3], 12, 0, 0);
+  return isNaN(d) ? new Date() : d;
+}
+
+// ==================== פעולה ====================
+
+function writeAction_(ss, d, user) {
+  const mikveh = canonicalMikveh_(ss, d.mikveh);
+  if (!mikveh) return { error: 'המקווה "' + txt_(d.mikveh, 80) + '" לא נמצא בבסיס הנתונים' };
+  const action = txt_(d.action, 60);
+  if (!action) return { error: 'חסר סוג פעולה' };
+  const sh = ss.getSheetByName(WRITE.ACTIONS_SHEET);
+  if (!sh) return { error: 'הלשונית "' + WRITE.ACTIONS_SHEET + '" לא נמצאה' };
+
+  const when = d.date ? dateOf_(d.date) : new Date();
+  const row = [];
+  for (let i = 0; i < WRITE.ACTION_COLS; i++) row.push('');
+  row[0] = when;
+  row[1] = txt_(d.rabbi, 80) || user.name;
+  row[2] = mikveh;
+  row[3] = txt_(d.attendant, 80);
+  row[4] = txt_(d.phone, 40) || user.phone;
+  row[5] = action;
+  row[6] = txt_(d.otzar, 20);
+  row[7] = txt_(d.drained, 200);
+  row[8] = txt_(d.sealed, 40);
+  row[9] = txt_(d.filled, 60);
+  row[10] = txt_(d.note);
+  row[12] = txt_(d.roofDone, 200);
+  row[13] = txt_(d.roofSealed, 40);
+  row[14] = txt_(d.reservoirSealed, 40);
+  row[15] = txt_(d.note2);
+  row[19] = d.liters ? Number(d.liters) || '' : '';
+  row[20] = txt_(d.validMonth, 20);
+  row[21] = txt_(d.validYear, 20);
+  sh.appendRow(row);
+
+  const record = apiCompact_({
+    ts: apiIsoDate_(when), rabbi: row[1], mikveh: mikveh, attendant: row[3], phone: row[4], action: action, otzar: row[6],
+    drained: row[7], sealed: row[8], filled: row[9], note: row[10], roofDone: row[12], roofSealed: row[13],
+    reservoirSealed: row[14], note2: row[15], liters: row[19] || null, validMonth: row[20], validYear: row[21],
+    mikvehId: apiNorm_(mikveh), source: 'app', by: user.name,
+  });
+  return { ok: true, record: record };
+}
+
+// ==================== דו"ח פיקוח ====================
+
+function writeInspection_(ss, d, user) {
+  const mikveh = canonicalMikveh_(ss, d.mikveh);
+  if (!mikveh) return { error: 'המקווה "' + txt_(d.mikveh, 80) + '" לא נמצא בבסיס הנתונים' };
+  const sh = ss.getSheetByName(WRITE.RAW_INSPECTION_SHEET);
+  if (!sh) return { error: 'הלשונית "' + WRITE.RAW_INSPECTION_SHEET + '" לא נמצאה' };
+  const src = Array.isArray(d.row) ? d.row : [];
+  const when = d.date ? dateOf_(d.date) : new Date();
+  const row = [];
+  for (let i = 0; i < WRITE.INSPECTION_COLS; i++) row.push(txt_(src[i], 1000));
+  row[0] = mikveh;
+  row[1] = when;
+  row[2] = txt_(d.rabbi, 80) || user.name;
+  row[3] = txt_(d.contact, 80);
+  row[4] = txt_(d.phone, 40);
+  sh.appendRow(row);
+  return { ok: true, record: { ts: apiIsoDate_(when), mikveh: mikveh, mikvehId: apiNorm_(mikveh), rabbi: row[2], by: user.name } };
+}
+
+// ==================== דיונים ====================
+
+function messagesSheet_(ss) {
+  let sh = ss.getSheetByName(WRITE.MESSAGES_SHEET);
+  if (!sh) {
+    sh = ss.insertSheet(WRITE.MESSAGES_SHEET);
+    sh.appendRow(WRITE.MESSAGES_HEADERS);
+    sh.setFrozenRows(1);
+    sh.setRightToLeft(true);
+  }
+  return sh;
+}
+
+function writeMessage_(ss, d, user) {
+  const text = txt_(d.text);
+  if (!text) return { error: 'הודעה ריקה' };
+  let mikveh = '';
+  if (d.mikveh) {
+    mikveh = canonicalMikveh_(ss, d.mikveh);
+    if (!mikveh) return { error: 'המקווה "' + txt_(d.mikveh, 80) + '" לא נמצא בבסיס הנתונים' };
+  }
+  const sh = messagesSheet_(ss);
+  const id = Utilities.getUuid();
+  const now = new Date();
+  sh.appendRow([id, now, mikveh, user.name, user.phone, text, txt_(d.replyTo, 60), 'app']);
+  return { ok: true, record: { id: id, ts: apiIsoDate_(now), mikveh: mikveh || null, mikvehId: mikveh ? apiNorm_(mikveh) : null, author: user.name, phone: user.phone, text: text, replyTo: txt_(d.replyTo, 60) || null, source: 'app' } };
+}
+
+/** כל ההודעות (עד MSG_LIMIT האחרונות), בסדר עולה. since = ISO: רק הודעות חדשות ממנו. */
+function apiMessages_(ss, since) {
+  const sh = ss.getSheetByName(WRITE.MESSAGES_SHEET);
+  if (!sh || sh.getLastRow() < 2) return [];
+  const last = sh.getLastRow();
+  const first = Math.max(2, last - WRITE.MSG_LIMIT + 1);
+  const values = sh.getRange(first, 1, last - first + 1, WRITE.MESSAGES_HEADERS.length).getValues();
+  const out = [];
+  values.forEach(function (v) {
+    const ts = apiIso_(v[1]);
+    if (!ts || !v[0]) return;
+    if (since && ts <= since) return;
+    out.push(apiCompact_({
+      id: String(v[0]), ts: ts, mikveh: apiClean_(v[2]), author: apiClean_(v[3]), phone: apiClean_(v[4]),
+      text: apiClean_(v[5]), replyTo: apiClean_(v[6]), source: apiClean_(v[7]) || 'app',
+    }));
+  });
+  if (since) {
+    // קישור למקווה גם בתשובה החלקית
+    const ids = {};
+    apiMikvaot_(ss).forEach(function (m) { ids[apiNorm_(m.name)] = m.id; });
+    out.forEach(function (r) { const mid = ids[apiNorm_(r.mikveh)]; if (mid) r.mikvehId = mid; });
+  }
+  return out;
+}
+
+// ==================== חלוקת עבודה (שיבוצים) ====================
+
+const WORK_TYPES = { fill: 'מילוי מאגר / החלפת אוצר', cert: 'חידוש תעודה', other: 'משימה' };
+
+function workSheet_(ss) {
+  let sh = ss.getSheetByName(WRITE.WORK_SHEET);
+  if (!sh) {
+    sh = ss.insertSheet(WRITE.WORK_SHEET);
+    sh.appendRow(WRITE.WORK_HEADERS);
+    sh.setFrozenRows(1);
+    sh.setRightToLeft(true);
+  }
+  return sh;
+}
+
+function workRecord_(v) {
+  return apiCompact_({
+    id: String(v[0]), ts: apiIso_(v[1]), type: apiClean_(v[2]) || 'other', mikveh: apiClean_(v[3]), status: apiClean_(v[4]) || 'open',
+    takenBy: apiClean_(v[5]), takenPhone: apiClean_(v[6]), takenAt: apiIso_(v[7]), doneAt: apiIso_(v[8]), note: apiClean_(v[9]), by: apiClean_(v[10]),
+  });
+}
+
+/** פתיחת משימות לחלוקה + הודעת מערכת בדיון הכללי. data.items = [{mikveh, type, note}] */
+function addWorkItems_(ss, d, user) {
+  const items = Array.isArray(d.items) ? d.items.slice(0, 200) : [];
+  if (!items.length) return { error: 'לא נבחרו מקוואות' };
+  const sh = workSheet_(ss);
+  const now = new Date();
+  const records = [], names = [];
+  items.forEach(function (it) {
+    const mikveh = canonicalMikveh_(ss, it.mikveh);
+    if (!mikveh) return;
+    const type = WORK_TYPES[it.type] ? it.type : 'other';
+    const id = Utilities.getUuid();
+    sh.appendRow([id, now, type, mikveh, 'open', '', '', '', '', txt_(it.note, 200), user.name]);
+    records.push({ id: id, ts: apiIsoDate_(now), type: type, mikveh: mikveh, mikvehId: apiNorm_(mikveh), status: 'open', note: txt_(it.note, 200) || null, by: user.name });
+    names.push(mikveh);
+  });
+  if (!records.length) return { error: 'אף מקווה לא נמצא בבסיס הנתונים' };
+  const typeLabel = WORK_TYPES[records[0].type];
+  const text = '📋 ' + user.name + ' פתח/ה ' + records.length + ' משימות לחלוקה (' + typeLabel + '): ' + names.join(', ') + '.\nלבחירה: מסך "חלוקת עבודה" ➜ "אני לוקח".';
+  const msg = writeMessage_(ss, { mikveh: '', text: text }, { name: user.name, phone: user.phone });
+  if (msg.record) msg.record.source = 'system';
+  return { ok: true, records: records, message: msg.record || null };
+}
+
+/** עדכון סטטוס: taken (המשתמש לוקח), open (שחרור), done (בוצע). */
+function updateWorkItem_(ss, d, user) {
+  const sh = workSheet_(ss);
+  const last = sh.getLastRow();
+  if (last < 2) return { error: 'המשימה לא נמצאה' };
+  const ids = sh.getRange(2, 1, last - 1, 1).getValues();
+  let rowNum = -1;
+  for (let i = 0; i < ids.length; i++) { if (String(ids[i][0]) === String(d.id)) { rowNum = i + 2; break; } }
+  if (rowNum < 0) return { error: 'המשימה לא נמצאה' };
+  const status = ['open', 'taken', 'done'].indexOf(d.status) >= 0 ? d.status : 'taken';
+  const now = new Date();
+  const row = sh.getRange(rowNum, 1, 1, WRITE.WORK_HEADERS.length).getValues()[0];
+  if (status === 'taken') { row[5] = user.name; row[6] = user.phone; row[7] = now; row[8] = ''; }
+  if (status === 'open') { row[5] = ''; row[6] = ''; row[7] = ''; row[8] = ''; }
+  if (status === 'done') { if (!row[5]) { row[5] = user.name; row[6] = user.phone; row[7] = now; } row[8] = now; }
+  row[4] = status;
+  if (d.note !== undefined) row[9] = txt_(d.note, 200);
+  sh.getRange(rowNum, 1, 1, row.length).setValues([row]);
+  const rec = workRecord_(row);
+  rec.mikvehId = apiNorm_(rec.mikveh);
+  // הודעת מערכת בדיון הכללי כדי שכולם יראו מי לקח מה
+  const m = String(rec.mikveh || '');
+  const text = status === 'taken' ? '✋ ' + user.name + ' לוקח/ת: ' + m + ' (' + WORK_TYPES[rec.type] + ')'
+    : status === 'done' ? '✅ ' + user.name + ' סיים/ה: ' + m + ' (' + WORK_TYPES[rec.type] + ')'
+    : '↩️ ' + user.name + ' שחרר/ה: ' + m;
+  const msg = writeMessage_(ss, { mikveh: '', text: text }, user);
+  if (msg.record) msg.record.source = 'system';
+  return { ok: true, record: rec, message: msg.record || null };
+}
+
+/** כל המשימות (עד WORK_LIMIT האחרונות). */
+function apiWork_(ss) {
+  const sh = ss.getSheetByName(WRITE.WORK_SHEET);
+  if (!sh || sh.getLastRow() < 2) return [];
+  const last = sh.getLastRow();
+  const first = Math.max(2, last - WRITE.WORK_LIMIT + 1);
+  const values = sh.getRange(first, 1, last - first + 1, WRITE.WORK_HEADERS.length).getValues();
+  const out = [];
+  values.forEach(function (v) { if (v[0]) out.push(workRecord_(v)); });
+  return out;
+}
