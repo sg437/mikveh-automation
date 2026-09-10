@@ -4,7 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>מערכת כשרות המקוואות</title>
-<link rel="manifest" href="manifest.json">
+<link rel="manifest" href="manifest.json" id="appManifest">
+<script>if(/[?&]app=talk/.test(location.search)){document.getElementById("appManifest").href="talk-manifest.json";}</script>
 <meta name="theme-color" content="#123C5A">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="מקוואות">
@@ -335,6 +336,28 @@
   .wcard .wl{font-size:.8rem;color:var(--muted)}
   .wcard .wb{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px}
   .selcol{width:28px}
+  .nav-toggle.back{display:inline-flex;align-items:center;justify-content:center;font-size:1.4rem;font-weight:800}
+  .locked{display:flex;align-items:center;gap:10px;background:var(--brand-soft);border-radius:8px;padding:8px 10px}
+  .locked b{color:var(--brand)}
+  .reacts{display:flex;gap:4px;flex-wrap:wrap;margin-top:5px}
+  .react{background:#fff;border:1px solid var(--line);border-radius:20px;padding:1px 8px;font-size:.8rem;cursor:pointer;line-height:1.6}
+  .react.on{background:var(--brand-soft);border-color:var(--brand-2)}
+  .react.add{opacity:.55}
+  .msg:hover .react.add{opacity:1}
+  .epick{position:fixed;background:#fff;border:1px solid var(--line);border-radius:22px;box-shadow:0 8px 24px rgba(0,0,0,.18);padding:4px 6px;display:flex;gap:2px;z-index:90}
+  .epick button{background:none;border:none;font-size:1.25rem;cursor:pointer;padding:3px 5px;border-radius:50%}
+  .epick button:hover{background:var(--gray-soft)}
+  .chsec{display:flex;justify-content:space-between;align-items:center;font-size:.74rem;font-weight:800;color:var(--muted);padding:10px 10px 4px;margin-top:4px;border-top:1px solid var(--line)}
+  .ch .chi{width:20px;text-align:center}
+  .mpick .rec.on{background:var(--bad);color:#fff;border-color:var(--bad)}
+  .mth .mfile{width:64px;height:64px;border-radius:8px;border:1px solid var(--line);background:var(--gray-soft);display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:1.4rem;gap:2px}
+  .mth .mfile small{font-size:.6rem;color:var(--muted);max-width:60px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .mplay{height:34px;max-width:240px}
+  .mvid{display:inline-flex;flex-direction:column;background:var(--ink);color:#fff;border-radius:8px;padding:10px 14px;text-decoration:none;font-size:.85rem}
+  .mvid small{opacity:.7;font-size:.7rem}
+  .pph.audio{flex-direction:column;gap:6px;font-size:1.6rem}
+  .pph.audio audio{width:90%;height:32px}
+  body.talk-app .sidenav,body.talk-app .nav-toggle:not(.back),body.talk-app #btnReport{display:none}
   /* --- משתמש, תמונות --- */
   .avatar{width:22px;height:22px;border-radius:50%;vertical-align:middle;object-fit:cover}
   .avatar.big{width:44px;height:44px}
@@ -369,6 +392,7 @@
     <div class="head-top">
       <div class="brand">
         <button class="nav-toggle" id="navToggle" type="button" aria-label="תפריט">☰</button>
+        <button class="nav-toggle back" id="btnBack" type="button" aria-label="חזרה" title="חזרה" hidden>›</button>
         <div>
           <h1>מערכת כשרות <span>המקוואות</span></h1>
           <div class="sub">טהרת המשפחה · כרטיס לכל מקווה</div>
@@ -397,6 +421,7 @@
     <a href="#/whatsapp" data-view="whatsapp"><span class="ic">📱</span><span class="t">דיווחי וואטסאפ</span><span class="n" id="navCountWa"></span></a>
     <a href="#/dashboard" data-view="dashboard"><span class="ic">📊</span><span class="t">לוח בקרה</span></a>
     <a href="#/forms" data-view="forms"><span class="ic">📝</span><span class="t">טפסים</span></a>
+    <a href="#/settings" data-view="settings"><span class="ic">⚙️</span><span class="t">הגדרות והרשאות</span></a>
   </nav>
 </aside>
 
@@ -501,6 +526,9 @@
   <!-- ===== ניהול משתמשים ===== -->
   <section class="view" id="view-users"></section>
 
+  <!-- ===== הגדרות והרשאות ===== -->
+  <section class="view" id="view-settings"></section>
+
   <!-- ===== דיונים ===== -->
   <section class="view" id="view-talk"></section>
 
@@ -582,6 +610,7 @@
 <script src="work.js"></script>
 <script src="media.js"></script>
 <script src="edit.js"></script>
+<script src="perms.js"></script>
 <script src="auth.js"></script>
 </body>
 </html>

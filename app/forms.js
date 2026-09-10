@@ -94,7 +94,15 @@
     const lab = '<label for="' + id + '">' + esc(f.l) + (f.req ? ' <span class="req">*</span>' : '') + '</label>';
     if (f.t === 'date') return '<div class="ff"><label for="' + id + '">' + esc(f.l) + '</label><input type="date" id="' + id + '" name="' + name + '" value="' + esc(val || today()) + '"><small class="heb" data-heb-for="' + id + '">' + esc(hebOfDateInput(val || today())) + '</small></div>';
     if (f.t === 'rabbi') {
-      const K = window.MK, names = {};
+      const K = window.MK;
+      const me = K.getUser();
+      // כשמחוברים – השם נלקח מהכניסה ואין צורך לכתוב אותו כל פעם
+      if (me.name && !window._formRabbiEdit) {
+        return '<div class="ff"><span class="lbl">' + esc(f.l) + '</span><div class="locked"><b>' + esc(me.name) + '</b>' +
+          '<input type="hidden" id="' + id + '" name="' + name + '" value="' + esc(me.name) + '">' +
+          '<button type="button" class="lnk" data-rabbi-edit="1">מדווח בשם מישהו אחר</button></div></div>';
+      }
+      const names = {};
       (K.S.data.actions || []).forEach((a) => { if (a.rabbi) names[a.rabbi] = (names[a.rabbi] || 0) + 1; });
       (K.S.data.inspections || []).forEach((i) => { if (i.rabbi) names[i.rabbi] = (names[i.rabbi] || 0) + 1; });
       (K.S.data.users || []).forEach((u) => { if (u.name && u.active !== false) names[u.name] = (names[u.name] || 0) + 1000; });
@@ -131,6 +139,7 @@
 
   function openForm(key, m) {
     const MK = window.MK;
+    window._formRabbiEdit = window._formRabbiEdit || false;
     const root = MK.$('#rmStep3');
     MK.$('#rmStep1').hidden = true; MK.$('#rmStep2').hidden = true; root.hidden = false;
     const user = MK.getUser();
@@ -153,6 +162,8 @@
     root._pics = pick ? pick.bind(root) : null;
 
     root.querySelector('#rmBack').addEventListener('click', () => { root.hidden = true; MK.$('#rmStep2').hidden = false; });
+    const rabbiEdit = root.querySelector('[data-rabbi-edit]');
+    if (rabbiEdit) rabbiEdit.addEventListener('click', () => { window._formRabbiEdit = true; openForm(key, m); });
     const actBox = root.querySelector('#actFields');
     if (actBox) {
       const paint = () => {

@@ -27,6 +27,7 @@ const AUTH = {
   SESSION_DAYS: 90,
   ROLES: ['מנהל', 'מפקח', 'בלנית', 'צופה'],
   CACHE_SEC: 600,
+  PERMS_SHEET: 'הרשאות',
   CLIENT_ID_PROP: 'GOOGLE_CLIENT_ID',
   DEFAULT_ROLE_PROP: 'DEFAULT_ROLE',
 };
@@ -203,15 +204,84 @@ function authUpdateMe_(ss, d, user) {
   return { ok: true };
 }
 
+// ---- טבלת הרשאות: מה כל תפקיד רשאי לעשות (ניתן לעריכה במסך ההגדרות) ----
+const PERM_ACTIONS = [
+  { key: 'addAction', label: 'דיווח פעולה (החלפה, ריקון, תעודה...)', def: { 'מפקח': 1, 'בלנית': 1 } },
+  { key: 'addInspection', label: 'דו"ח פיקוח כשרות', def: { 'מפקח': 1 } },
+  { key: 'addMessage', label: 'כתיבה בדיונים', def: { 'מפקח': 1, 'בלנית': 1 } },
+  { key: 'addMedia', label: 'העלאת תמונות, סרטונים והקלטות', def: { 'מפקח': 1, 'בלנית': 1 } },
+  { key: 'react', label: 'תגובות אימוג\'י', def: { 'מפקח': 1, 'בלנית': 1, 'צופה': 1 } },
+  { key: 'addGroup', label: 'פתיחת קבוצות דיון', def: { 'מפקח': 1 } },
+  { key: 'updateGroup', label: 'עריכת קבוצות דיון', def: { 'מפקח': 1 } },
+  { key: 'addWorkItems', label: 'פתיחת משימות לחלוקה', def: { 'מפקח': 1 } },
+  { key: 'updateWorkItem', label: 'לקיחת משימה וסימון ביצוע', def: { 'מפקח': 1, 'בלנית': 1 } },
+  { key: 'updateMikveh', label: 'עריכת פרטי מקווה', def: { 'מפקח': 1 } },
+  { key: 'addMikveh', label: 'הוספת מקווה חדש', def: { 'מפקח': 1 } },
+];
+const PERM_ROLES = ['מפקח', 'בלנית', 'צופה']; // מנהל תמיד הכל
+
+function permsSheet_(ss) {
+  let sh = ss.getSheetByName(AUTH.PERMS_SHEET);
+  if (!sh) {
+    sh = ss.insertSheet(AUTH.PERMS_SHEET);
+    sh.appendRow(['פעולה', 'תיאור'].concat(PERM_ROLES));
+    PERM_ACTIONS.forEach(function (a) {
+      sh.appendRow([a.key, a.label].concat(PERM_ROLES.map(function (r) { return a.def[r] ? 'כן' : 'לא'; })));
+    });
+    sh.setFrozenRows(1);
+    sh.setRightToLeft(true);
+  }
+  return sh;
+}
+
+/** { action: { role: true/false } } */
+function authPerms_(ss) {
+  const cache = CacheService.getScriptCache();
+  const cached = cache.get('perms_v1');
+  if (cached) return JSON.parse(cached);
+  const sh = permsSheet_(ss);
+  const out = {};
+  const values = sh.getLastRow() > 1 ? sh.getRange(2, 1, sh.getLastRow() - 1, 2 + PERM_ROLES.length).getValues() : [];
+  values.forEach(function (v) {
+    if (!v[0]) return;
+    const row = {};
+    PERM_ROLES.forEach(function (r, i) { row[r] = String(v[2 + i]) === 'כן'; });
+    out[String(v[0])] = row;
+  });
+  PERM_ACTIONS.forEach(function (a) { if (!out[a.key]) { const row = {}; PERM_ROLES.forEach(function (r) { row[r] = !!a.def[r]; }); out[a.key] = row; } });
+  out._labels = {};
+  PERM_ACTIONS.forEach(function (a) { out._labels[a.key] = a.label; });
+  cache.put('perms_v1', JSON.stringify(out), 120);
+  return out;
+}
+
+function authSetPerms_(ss, d, admin) {
+  if (!admin || admin.role !== 'מנהל') return { error: 'פעולה למנהלים בלבד' };
+  const sh = permsSheet_(ss);
+  const last = sh.getLastRow();
+  const keys = last > 1 ? sh.getRange(2, 1, last - 1, 1).getValues() : [];
+  const changes = d.perms || {};
+  for (let i = 0; i < keys.length; i++) {
+    const k = String(keys[i][0]);
+    if (!changes[k]) continue;
+    PERM_ROLES.forEach(function (r, j) {
+      if (changes[k][r] !== undefined) sh.getRange(i + 2, 3 + j).setValue(changes[k][r] ? 'כן' : 'לא');
+    });
+  }
+  CacheService.getScriptCache().remove('perms_v1');
+  return { ok: true, perms: authPerms_(ss) };
+}
+
 /** האם התפקיד רשאי לבצע פעולת כתיבה מסוימת. */
 function authCan_(user, action) {
   const role = user && user.role;
   if (!role) return true; // מצב ישן (ללא משתמשים)
   if (role === 'מנהל') return true;
-  if (['users', 'addUser', 'updateUser'].indexOf(action) >= 0) return false;
-  if (role === 'צופה') return ['logout', 'updateMe'].indexOf(action) >= 0;
-  if (action === 'addWorkItems') return role === 'מפקח';
-  return true;
+  if (['users', 'addUser', 'updateUser', 'setPerms'].indexOf(action) >= 0) return false;
+  if (['logout', 'updateMe'].indexOf(action) >= 0) return true;
+  const perms = authPerms_(apiSpreadsheet_());
+  if (perms[action] && perms[action][role] !== undefined) return !!perms[action][role];
+  return role !== 'צופה';
 }
 
 /** מנרמל טלפון ישראלי ל-chatId של Green API (9725XXXXXXXX@c.us). */

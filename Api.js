@@ -74,7 +74,8 @@ function apiHandle_(e, action) {
       work.forEach(function (w) { const mid = ids[apiNorm_(w.mikveh)]; if (mid) w.mikvehId = mid; });
       const media = apiMedia_(ss);
       media.forEach(function (x) { const mid = ids[apiNorm_(x.mikveh)]; if (mid) x.mikvehId = mid; });
-      return jsonResponse_({ messages: apiMessages_(ss, (e.parameter && e.parameter.since) || ''), work: work, media: media });
+      return jsonResponse_({ messages: apiMessages_(ss, (e.parameter && e.parameter.since) || ''), work: work, media: media,
+        groups: apiGroups_(ss), reactions: apiReactions_(ss) });
     }
     if (action === 'data') {
       const data = apiBuildData_();
@@ -124,6 +125,8 @@ function apiBuildData_() {
   const messages = apiMessages_(ss, '');
   const work = apiWork_(ss);
   const media = apiMedia_(ss);
+  const groups = apiGroups_(ss);
+  const reactions = apiReactions_(ss);
 
   // קישור לפי שם מקווה מנורמל
   const ids = {};
@@ -146,7 +149,7 @@ function apiBuildData_() {
       fieldLabels: labels,
     },
     mikvaot: mikvaot, actions: actions, inspections: inspections, tasks: tasks, plugs: plugs, whatsapp: whatsapp, messages: messages, work: work, media: media,
-    users: authPublicUsers_(ss),
+    groups: groups, reactions: reactions, users: authPublicUsers_(ss), perms: authPerms_(ss),
   };
 }
 

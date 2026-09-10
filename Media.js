@@ -10,11 +10,11 @@
 
 const MEDIA = {
   SHEET: 'מדיה',
-  HEADERS: ['מזהה', 'זמן', 'מקווה', 'הקשר', 'מזהה רשומה', 'מזהה קובץ', 'קישור', 'שם קובץ', 'הועלה ע"י'],
+  HEADERS: ['מזהה', 'זמן', 'מקווה', 'הקשר', 'מזהה רשומה', 'מזהה קובץ', 'קישור', 'שם קובץ', 'הועלה ע"י', 'סוג'],
   FOLDER_PROP: 'MIKVEH_ARCHIVE_FOLDER_ID',
   SUBFOLDER: 'מהמערכת',
   GENERAL_FOLDER: 'דיון כללי',
-  MAX_BYTES: 8 * 1024 * 1024,
+  MAX_BYTES: 25 * 1024 * 1024,
   LIMIT: 3000,
 };
 
@@ -37,35 +37,49 @@ function mediaFolder_(mikveh) {
   return findOrCreateFolder_(parent, MEDIA.SUBFOLDER);
 }
 
+function mediaKind_(mime, name) {
+  const m = String(mime || '');
+  if (m.indexOf('video') === 0) return 'video';
+  if (m.indexOf('audio') === 0) return 'audio';
+  if (m.indexOf('image') === 0) return 'image';
+  if (/\.(mp4|mov|webm)$/i.test(String(name || ''))) return 'video';
+  if (/\.(m4a|mp3|ogg|webm|wav)$/i.test(String(name || ''))) return 'audio';
+  return 'file';
+}
+
 function mediaRecord_(v) {
   const fileId = String(v[5] || '');
+  const kind = apiClean_(v[9]) || mediaKind_('', v[7]);
   return apiCompact_({
     id: String(v[0]), ts: apiIso_(v[1]), mikveh: apiClean_(v[2]), context: apiClean_(v[3]), refId: apiClean_(v[4]),
-    fileId: fileId, url: apiClean_(v[6]), name: apiClean_(v[7]), by: apiClean_(v[8]),
+    fileId: fileId, url: apiClean_(v[6]), name: apiClean_(v[7]), by: apiClean_(v[8]), kind: kind,
     view: fileId ? 'https://drive.google.com/uc?export=view&id=' + fileId : null,
     thumb: fileId ? 'https://drive.google.com/thumbnail?id=' + fileId + '&sz=w800' : null,
+    play: fileId ? 'https://drive.google.com/file/d/' + fileId + '/preview' : null,
   });
 }
 
 function addMedia_(ss, d, user) {
   const b64 = String(d.base64 || '').replace(/^data:[^;]+;base64,/, '');
   if (!b64) return { error: 'חסר קובץ' };
-  if (b64.length * 0.75 > MEDIA.MAX_BYTES) return { error: 'הקובץ גדול מדי (עד 8MB)' };
+  if (b64.length * 0.75 > MEDIA.MAX_BYTES) return { error: 'הקובץ גדול מדי (עד 25MB)' };
   let mikveh = '';
   if (d.mikveh) {
     mikveh = canonicalMikveh_(ss, d.mikveh);
     if (!mikveh) return { error: 'המקווה "' + txt_(d.mikveh, 80) + '" לא נמצא' };
   }
   const mime = txt_(d.mime, 60) || 'image/jpeg';
+  const kind = mediaKind_(mime, d.name);
   const stamp = Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'yyyy-MM-dd HH-mm');
-  const name = txt_(d.name, 80) || (stamp + (mime.indexOf('png') >= 0 ? '.png' : '.jpg'));
+  const ext = kind === 'video' ? '.mp4' : kind === 'audio' ? '.m4a' : (mime.indexOf('png') >= 0 ? '.png' : '.jpg');
+  const name = txt_(d.name, 80) || (stamp + ext);
   const blob = Utilities.newBlob(Utilities.base64Decode(b64), mime, (mikveh ? mikveh + ' ' : '') + stamp + ' ' + name);
   const folder = mediaFolder_(mikveh);
   const file = folder.createFile(blob);
   try { file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW); } catch (ignore) {}
   const id = Utilities.getUuid();
   const now = new Date();
-  const row = [id, now, mikveh, txt_(d.context, 20) || 'message', txt_(d.refId, 80), file.getId(), file.getUrl(), name, user.name];
+  const row = [id, now, mikveh, txt_(d.context, 20) || 'message', txt_(d.refId, 80), file.getId(), file.getUrl(), name, user.name, kind];
   mediaSheet_(ss).appendRow(row);
   const rec = mediaRecord_(row);
   rec.mikvehId = mikveh ? apiNorm_(mikveh) : null;
