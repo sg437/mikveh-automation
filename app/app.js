@@ -159,15 +159,10 @@
   }
 
   // כל הדיווחים נעשים בתוך המערכת (forms.js). אין הפניה לטפסים חיצוניים.
+  // שני סוגי דיווח, כמו שני הטפסים המקוריים
   const FORMS = [
-    { key: 'inspection', icon: '📋', title: 'דו"ח פיקוח', desc: 'ביקורת הלכתית מלאה: גג, מאגר, אוצרות, בור טבילה, טכני' },
-    { key: 'reservoir', icon: '🌧', title: 'ריקון מאגר', desc: 'ריקון והחלפת מי גשמים במאגר' },
-    { key: 'zeria', icon: '🔄', title: 'החלפת אוצר זריעה', desc: 'ריקון, איטום ומילוי אוצר הזריעה' },
-    { key: 'hashaka', icon: '🔁', title: 'החלפת אוצר השקה', desc: 'ריקון, איטום ומילוי אוצר ההשקה' },
-    { key: 'repair', icon: '🛠', title: 'טיפול / תיקון', desc: 'טיפול בבור הטבילה, באוצרות, במאגר או בגג' },
-    { key: 'cert', icon: '📜', title: 'חידוש תעודה', desc: 'תעודת כשרות חדשה עם תוקף לשנה' },
-    { key: 'visit', icon: '👣', title: 'ביקור כשרות', desc: 'ביקור שוטף ללא דוח מלא' },
-    { key: 'plug', icon: '🔌', title: 'פקק על הגג', desc: 'הנחת פקק לפתיחת המאגר לגשם' },
+    { key: 'inspection', icon: '📋', title: 'דו"ח פיקוח כשרות', desc: 'הביקורת המלאה: גג, מאגר, אוצרות, בור טבילה, שונות / טכני' },
+    { key: 'action', icon: '🔧', title: 'דיווח פעולה', desc: 'החלפת אוצר · ריקון מאגר · תיקון כשרות · פקק על הגג · חידוש תעודה · אישור מילוי' },
   ];
 
   // ============================================================ עזרים
@@ -1104,7 +1099,7 @@
     $('#rmStep1').hidden = true; $('#rmStep2').hidden = false; $('#rmStep3').hidden = true;
     $('#rmChosenName').textContent = m.name;
     $('#rmChosenSub').textContent = [m.council, m.region, m.address].filter(Boolean).join(' · ');
-    $('#rmActions').innerHTML = FORMS.map((f) => '<button type="button" data-form="' + f.key + '"><span class="ic">' + f.icon + '</span>' + esc(f.title) + '<small>' + esc(f.desc) + '</small></button>').join('') +
+    $('#rmActions').innerHTML = FORMS.map((f) => '<button type="button" class="big" data-form="' + f.key + '"><span class="ic">' + f.icon + '</span>' + esc(f.title) + '<small>' + esc(f.desc) + '</small></button>').join('') +
       '<button type="button" class="card" data-form="card"><span class="ic">📁</span>פתיחת הכרטיס<small>כל הנתונים של המקווה</small></button>';
     $('#rmNote').hidden = !!DataSource.url('data') && navigator.onLine;
   }
