@@ -375,6 +375,7 @@
         <button class="btn report-btn" id="btnReport" type="button">＋ דיווח / עדכון</button>
         <button class="btn user-btn" id="btnUser" type="button">👤</button>
         <div class="head-meta" id="headMeta"></div>
+        <span class="badge warn" id="outboxBadge" hidden></span>
       </div>
     </div>
   </div>
@@ -505,8 +506,9 @@
 
   <!-- ===== טפסים ===== -->
   <section class="view" id="view-forms">
-    <div class="note-box">בשלב זה הדיווחים עדיין נשלחים דרך טפסי Google הקיימים ומתעדכנים בגיליון. בשלב הבא הטפסים ייבנו בתוך המערכת, יפתחו ישירות מכרטיס המקווה עם השם ממולא, ויעדכנו את הכרטיס אוטומטית.</div>
+    <div class="note-box">כל הדיווחים נעשים כאן, בתוך המערכת: בוחרים סוג דיווח, מקלידים את שם המקווה, ממלאים ושומרים. הדיווח נרשם מיד בתיק המקווה ובגיליון.</div>
     <div class="forms-list" id="formsList"></div>
+    <div id="outboxList" style="margin-top:14px"></div>
   </section>
 
   <div class="footer" id="footer"></div>
@@ -534,7 +536,7 @@
       <div id="rmStep2" hidden>
         <div class="rm-chosen"><div><div class="l">מקווה</div><div class="v" id="rmChosenName"></div><div class="s" id="rmChosenSub"></div></div><button class="btn small" id="rmChange" type="button">החלף</button></div>
         <div class="rm-grid" id="rmActions"></div>
-        <div class="note-box" id="rmNote" style="margin:12px 0 0">אין חיבור חי לגיליון (config.js), לכן כל כפתור פותח את טופס Google המתאים בחלון חדש.</div>
+        <div class="note-box" id="rmNote" style="margin:12px 0 0">אין חיבור לגיליון כרגע. הדיווח יישמר במכשיר ויישלח אוטומטית כשיהיה חיבור.</div>
       </div>
       <div id="rmStep3" hidden></div>
     </div>
