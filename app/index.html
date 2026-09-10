@@ -36,13 +36,35 @@
   .report-btn:hover{background:#F2D077}
   .head-meta{font-size:.78rem;opacity:.95;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
   .head-meta .btn.small{padding:3px 9px;font-size:.74rem}
-  nav{display:flex;gap:2px;flex-wrap:wrap}
-  nav a{color:#D6E2EC;text-decoration:none;padding:9px 14px;font-weight:700;font-size:.9rem;border-radius:8px 8px 0 0}
-  nav a.on{background:var(--bg);color:var(--ink)}
-  nav a .n{background:rgba(255,255,255,.18);border-radius:10px;padding:0 7px;font-size:.75rem;margin-inline-start:4px}
-  nav a.on .n{background:var(--brand-soft);color:var(--brand)}
-
-  main{max-width:1180px;margin:0 auto;padding:16px 16px 80px}
+  .head-inner{padding-bottom:10px}
+  .nav-toggle{display:none;background:transparent;border:1px solid rgba(255,255,255,.4);color:#fff;border-radius:8px;width:38px;height:38px;font-size:1.2rem}
+  .layout{display:flex;align-items:flex-start;min-height:calc(100vh - 80px)}
+  .sidenav{width:224px;flex:none;position:sticky;top:76px;height:calc(100vh - 76px);overflow-y:auto;padding:14px 10px;background:#fff;border-inline-end:1px solid var(--line)}
+  nav{display:flex;flex-direction:column;gap:3px}
+  nav a{display:flex;align-items:center;gap:10px;color:var(--ink);text-decoration:none;padding:10px 12px;font-weight:700;font-size:.92rem;border-radius:10px}
+  nav a .ic{font-size:1.15rem;width:24px;text-align:center}
+  nav a .t{flex:1}
+  nav a:hover{background:var(--gray-soft)}
+  nav a.on{background:var(--brand);color:#fff;box-shadow:0 4px 10px rgba(18,60,90,.25)}
+  nav a .n{background:var(--brand-soft);color:var(--brand);border-radius:10px;padding:0 7px;font-size:.74rem}
+  nav a .n:empty{display:none}
+  nav a.on .n{background:rgba(255,255,255,.22);color:#fff}
+  .nav-backdrop{display:none}
+  main{flex:1;min-width:0;max-width:1180px;margin:0 auto;padding:16px 16px 80px}
+  @media (max-width:900px){
+    .nav-toggle{display:inline-flex;align-items:center;justify-content:center}
+    .sidenav{position:fixed;top:0;bottom:0;inset-inline-start:0;height:100vh;z-index:70;transform:translateX(100%);transition:transform .2s;box-shadow:0 0 30px rgba(0,0,0,.25);padding-top:18px}
+    [dir="ltr"] .sidenav{transform:translateX(-100%)}
+    body.nav-open .sidenav{transform:none}
+    body.nav-open .nav-backdrop{display:block;position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:65}
+  }
+  .pgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px}
+  .pcard{display:flex;flex-direction:column;text-decoration:none;color:inherit;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#fff;box-shadow:var(--shadow)}
+  .pcard img,.pcard .pph{width:100%;aspect-ratio:4/3;object-fit:cover;background:var(--gray-soft);display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:.85rem}
+  .pcard .pc{padding:8px 10px;font-size:.82rem;display:flex;flex-direction:column;gap:3px}
+  .pcard .pt{color:var(--muted);font-size:.74rem}
+  .pcard .pcap{font-weight:600;line-height:1.3}
+  .pcard small{color:var(--muted)}
   .view{display:none}.view.on{display:block}
 
   /* --- כלים --- */
@@ -343,9 +365,10 @@
   <div class="head-inner">
     <div class="head-top">
       <div class="brand">
+        <button class="nav-toggle" id="navToggle" type="button" aria-label="תפריט">☰</button>
         <div>
           <h1>מערכת כשרות <span>המקוואות</span></h1>
-          <div class="sub">כרטיס לכל מקווה · פעולות · פיקוח · משימות</div>
+          <div class="sub">טהרת המשפחה · כרטיס לכל מקווה</div>
         </div>
       </div>
       <div class="head-actions">
@@ -354,19 +377,24 @@
         <div class="head-meta" id="headMeta"></div>
       </div>
     </div>
-    <nav id="nav">
-      <a href="#/" data-view="home">🏠 דף הבית</a>
-      <a href="#/list" data-view="list">מקוואות <span class="n" id="navCountList"></span></a>
-      <a href="#/tasks" data-view="tasks">משימות פתוחות <span class="n" id="navCountTasks"></span></a>
-      <a href="#/whatsapp" data-view="whatsapp">דיווחי וואטסאפ <span class="n" id="navCountWa"></span></a>
-      <a href="#/plan" data-view="plan">תכנון עבודה <span class="n" id="navCountPlan"></span></a>
-      <a href="#/work" data-view="work">חלוקת עבודה <span class="n" id="navCountWork"></span></a>
-      <a href="#/talk" data-view="talk">דיונים <span class="n" id="navCountTalk"></span></a>
-      <a href="#/dashboard" data-view="dashboard">לוח בקרה</a>
-      <a href="#/forms" data-view="forms">דיווח וטפסים</a>
-    </nav>
   </div>
 </header>
+
+<div class="layout">
+<div class="nav-backdrop" id="navBackdrop"></div>
+<aside class="sidenav">
+  <nav id="nav">
+    <a href="#/" data-view="home"><span class="ic">🏠</span><span class="t">דף הבית</span></a>
+    <a href="#/list" data-view="list"><span class="ic">🕍</span><span class="t">מקוואות</span><span class="n" id="navCountList"></span></a>
+    <a href="#/plan" data-view="plan"><span class="ic">📅</span><span class="t">תכנון עבודה</span><span class="n" id="navCountPlan"></span></a>
+    <a href="#/work" data-view="work"><span class="ic">✋</span><span class="t">חלוקת עבודה</span><span class="n" id="navCountWork"></span></a>
+    <a href="#/talk" data-view="talk"><span class="ic">💬</span><span class="t">דיונים</span><span class="n" id="navCountTalk"></span></a>
+    <a href="#/tasks" data-view="tasks"><span class="ic">⚠️</span><span class="t">משימות פתוחות</span><span class="n" id="navCountTasks"></span></a>
+    <a href="#/whatsapp" data-view="whatsapp"><span class="ic">📱</span><span class="t">דיווחי וואטסאפ</span><span class="n" id="navCountWa"></span></a>
+    <a href="#/dashboard" data-view="dashboard"><span class="ic">📊</span><span class="t">לוח בקרה</span></a>
+    <a href="#/forms" data-view="forms"><span class="ic">📝</span><span class="t">טפסים</span></a>
+  </nav>
+</aside>
 
 <main>
   <!-- ===== דף הבית ===== -->
@@ -385,6 +413,7 @@
         <div class="field"><label for="fSort">מיון</label><select id="fSort"><option value="name">שם</option><option value="council">מועצה</option><option value="cert">תוקף תעודה</option><option value="insp">פיקוח אחרון</option><option value="tasks">משימות פתוחות</option></select></div>
         <button class="btn" id="btnClear" type="button">נקה סינון</button>
         <button class="btn" id="btnExportList" type="button" title="ייצוא הרשימה המסוננת לאקסל">⬇ ייצוא לאקסל</button>
+        <button class="btn primary" id="btnNewMikveh" type="button">＋ מקווה חדש</button>
       </div>
       <div class="summary"><span id="listSummary"></span></div>
     </div>
@@ -482,6 +511,15 @@
 
   <div class="footer" id="footer"></div>
 </main>
+</div>
+
+<!-- ===== עריכת פרטי מקווה / מקווה חדש ===== -->
+<div class="modal-bg" id="editModal" hidden>
+  <div class="modal" role="dialog" aria-labelledby="editTitle" style="max-width:720px">
+    <div class="modal-head"><h2 id="editTitle">עריכת פרטים</h2><button class="x" type="button" aria-label="סגירה" onclick="document.getElementById('editModal').hidden=true">✕</button></div>
+    <div class="modal-body" id="editBody"></div>
+  </div>
+</div>
 
 <!-- ===== חלון דיווח / עדכון ===== -->
 <div class="modal-bg" id="reportModal" hidden>
@@ -538,6 +576,7 @@
 <script src="talk.js"></script>
 <script src="work.js"></script>
 <script src="media.js"></script>
+<script src="edit.js"></script>
 <script src="auth.js"></script>
 </body>
 </html>

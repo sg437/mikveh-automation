@@ -64,5 +64,32 @@
     return '<div class="panel"><h3>תמונות (' + list.length + ')</h3>' + thumbs(list) + '</div>';
   }
 
-  window.MikvehMedia = { shrink, picker, upload, forRef, forMikveh, thumbs, gallery };
+  /** מזהה קובץ דרייב מתוך קישור */
+  function driveId(url) { const m = String(url || '').match(/[-\w]{25,}/); return m ? m[0] : null; }
+
+  /** לשונית "תמונות": כל התמונות של המקווה עם הטקסט שנכתב לידן. */
+  function photosPane(m) {
+    const K = MK(), items = [];
+    const actByTs = {}; (K.S.actions[m.id] || []).forEach((a) => { actByTs[a.ts] = a; });
+    const msgById = {}; (K.S.data.messages || []).forEach((x) => { msgById[x.id] = x; });
+    forMikveh(m.id).forEach((x) => {
+      let cap = '', who = x.by || '';
+      if (x.context === 'message') { const msg = msgById[x.refId]; cap = msg ? (msg.text || '') : 'הודעה בדיון'; who = msg ? msg.author : who; }
+      else if (x.context === 'inspection') { cap = 'דו"ח פיקוח'; }
+      else { const a = actByTs[x.refId]; cap = a ? a.action + (a.otzar ? ' ' + a.otzar : '') + (a.note || a.note2 ? ' – ' + (a.note || a.note2) : '') : 'דיווח'; who = a ? (a.rabbi || who) : who; }
+      items.push({ ts: x.ts, thumb: x.thumb || x.view, url: x.url || x.view, cap, who, src: x.context === 'message' ? 'דיון' : x.context === 'inspection' ? 'פיקוח' : 'דיווח' });
+    });
+    (K.S.wa[m.id] || []).forEach((w) => {
+      (w.media || []).forEach((u) => { const id = driveId(u); items.push({ ts: w.ts, thumb: id ? 'https://drive.google.com/thumbnail?id=' + id + '&sz=w400' : null, url: u, cap: w.summary || w.text || '', who: w.sender || '', src: 'וואטסאפ' }); });
+    });
+    items.sort((a, b) => (b.ts || '').localeCompare(a.ts || ''));
+    if (!items.length) return '<div class="panel"><div class="empty">עדיין אין תמונות למקווה זה. אפשר לצרף תמונות בכל דיווח ובכל הודעה בדיון.</div></div>';
+    return '<div class="panel"><h3>תמונות (' + items.length + ')</h3><div class="pgrid">' + items.map((it) =>
+      '<a class="pcard" href="' + esc(it.url) + '" target="_blank" rel="noopener">' +
+        (it.thumb ? '<img src="' + esc(it.thumb) + '" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.replaceWith(Object.assign(document.createElement(\'div\'),{className:\'pph\',textContent:\'📎 קובץ (לחץ לפתיחה)\'}))">' : '<div class="pph">📎 קובץ (לחץ לפתיחה)</div>') +
+        '<div class="pc"><span class="badge brand">' + esc(it.src) + '</span> <span class="pt">' + esc(K.hebOf(it.ts)) + '</span><div class="pcap">' + esc((it.cap || '').slice(0, 160)) + '</div>' + (it.who ? '<small>' + esc(it.who) + '</small>' : '') + '</div></a>').join('') + '</div></div>';
+  }
+  function photosCount(m) { const K = MK(); return forMikveh(m.id).length + (K.S.wa[m.id] || []).reduce((n, w) => n + (w.media || []).length, 0); }
+
+  window.MikvehMedia = { shrink, picker, upload, forRef, forMikveh, thumbs, gallery, photosPane, photosCount };
 })();

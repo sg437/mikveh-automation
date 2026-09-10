@@ -68,6 +68,8 @@ function apiWritePost_(e, action) {
       if (action === 'addMessage') return jsonResponse_(writeMessage_(ss, data, user));
       if (action === 'addWorkItems') return jsonResponse_(addWorkItems_(ss, data, user));
       if (action === 'updateWorkItem') return jsonResponse_(updateWorkItem_(ss, data, user));
+      if (action === 'updateMikveh') return jsonResponse_(updateMikveh_(ss, data, user));
+      if (action === 'addMikveh') return jsonResponse_(addMikveh_(ss, data, user));
     } finally {
       lock.releaseLock();
     }
@@ -322,4 +324,70 @@ function apiWork_(ss) {
   const out = [];
   values.forEach(function (v) { if (v[0]) out.push(workRecord_(v)); });
   return out;
+}
+
+// ==================== פרטי המקווה (בסיס הנתונים) ====================
+
+/** שדות שמותר לערוך מהאפליקציה: מפתח -> עמודה (0-based) בלשונית "בסיס הנתונים".
+ *  עמודות התאריכים והתעודה (7, 8, 14, 17, 20, 37+) מחושבות בגיליון ולא נערכות כאן. */
+const MIKVEH_EDITABLE = {
+  council: 1, place: 2, address: 3, activity: 4, supervised: 5, notes: 6, attendant: 9, phone: 10, mikvehPhone: 11,
+  ownership: 12, reservoir: 13, otzarLocation: 15, otzarZeria: 16, otzarHashaka: 18, hashakaType: 19, chabadReplaced: 21,
+  filter: 22, kelim: 23, masterKey: 24, masterKeyWhich: 25, socket: 26, hoseTap: 27, localityType: 28, region: 29,
+  hoursSummer: 30, hoursWinter: 31, hoursErev: 32, hoursMotzash: 33, accessibility: 34, coordination: 35, notes2: 36,
+};
+
+function mikvehRow_(ss, name) {
+  const key = apiNorm_(name);
+  const sh = ss.getSheetByName(API.SHEETS.master);
+  const last = sh.getLastRow();
+  const names = sh.getRange(2, 1, last - 1, 1).getValues();
+  for (let i = 0; i < names.length; i++) {
+    const n = apiClean_(names[i][0]);
+    if (n && apiNorm_(n) === key) return { sh: sh, rowNum: i + 2, name: n };
+  }
+  return null;
+}
+
+function applyMikvehFields_(sh, rowNum, fields) {
+  const changed = [];
+  Object.keys(fields || {}).forEach(function (k) {
+    const col = MIKVEH_EDITABLE[k];
+    if (col === undefined) return;
+    sh.getRange(rowNum, col + 1).setValue(txt_(fields[k], 500));
+    changed.push(k);
+  });
+  return changed;
+}
+
+function updateMikveh_(ss, d, user) {
+  if (user.role && ['מנהל', 'מפקח'].indexOf(user.role) < 0) return { error: 'עריכת פרטים למנהל ולמפקח בלבד' };
+  const r = mikvehRow_(ss, d.mikveh);
+  if (!r) return { error: 'המקווה "' + txt_(d.mikveh, 80) + '" לא נמצא' };
+  const changed = applyMikvehFields_(r.sh, r.rowNum, d.fields);
+  if (!changed.length) return { error: 'לא נשלחו שדות לעדכון' };
+  const labels = {};
+  API_MASTER_FIELDS.forEach(function (f) { labels[f[1]] = f[2]; });
+  const text = '✏️ ' + user.name + ' עדכן/ה פרטים: ' + changed.map(function (k) { return labels[k] || k; }).join(', ');
+  const msg = writeMessage_(ss, { mikveh: r.name, text: text, _system: true }, user);
+  if (msg.record) msg.record.source = 'system';
+  return { ok: true, changed: changed, message: msg.record || null };
+}
+
+function addMikveh_(ss, d, user) {
+  if (user.role && ['מנהל', 'מפקח'].indexOf(user.role) < 0) return { error: 'הוספת מקווה למנהל ולמפקח בלבד' };
+  const name = txt_(d.name, 120);
+  if (!name) return { error: 'חסר שם מקווה' };
+  if (mikvehRow_(ss, name)) return { error: 'כבר קיים מקווה בשם הזה' };
+  const sh = ss.getSheetByName(API.SHEETS.master);
+  const row = [];
+  for (let i = 0; i < 37; i++) row.push('');
+  row[0] = name;
+  Object.keys(d.fields || {}).forEach(function (k) { const col = MIKVEH_EDITABLE[k]; if (col !== undefined) row[col] = txt_(d.fields[k], 500); });
+  sh.appendRow(row);
+  const rec = { id: apiNorm_(name), name: name };
+  API_MASTER_FIELDS.forEach(function (f) { if (f[0] < row.length && row[f[0]] !== '') rec[f[1]] = row[f[0]]; });
+  const msg = writeMessage_(ss, { mikveh: name, text: '🆕 ' + user.name + ' הוסיף/ה את המקווה למערכת', _system: true }, user);
+  if (msg.record) msg.record.source = 'system';
+  return { ok: true, record: rec, message: msg.record || null };
 }

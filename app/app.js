@@ -246,6 +246,7 @@
     const view = parts[0] || 'home';
     document.querySelectorAll('.view').forEach((v) => v.classList.remove('on'));
     document.querySelectorAll('nav a').forEach((a) => a.classList.toggle('on', a.dataset.view === (view === 'm' ? 'list' : view)));
+    document.body.classList.remove('nav-open');
     if (view === 'home') { renderHome(); $('#view-home').classList.add('on'); window.scrollTo(0, 0); return; }
     if (view === 'm' && parts[1]) {
       renderCard(decodeURIComponent(parts[1]), parts[2] || 'details');
@@ -302,6 +303,7 @@
       applyList();
     });
     $('#btnExportList').addEventListener('click', () => exportMikvaot(S.list));
+    $('#btnNewMikveh').addEventListener('click', () => { if (window.MikvehEdit) MikvehEdit.open(null); });
     $('#btnClear').addEventListener('click', () => {
       ['q', 'fRegion', 'fCouncil', 'fSup', 'fCert', 'fAct'].forEach((id) => { $('#' + id).value = ''; });
       $('#fSort').value = 'name';
@@ -391,7 +393,7 @@
     const plugs = S.plugs[m.id] || [];
     const li = ins[0];
 
-    const formMenu = '<button class="btn primary" id="cardReport" type="button">＋ דיווח / עדכון</button>';
+    const formMenu = '<button class="btn primary" id="cardReport" type="button">＋ דיווח / עדכון</button><button class="btn" id="cardEdit" type="button" title="עריכת פרטי המקווה">✏️ עריכת פרטים</button>';
 
     const head = '<a class="back" href="#/list">‹ חזרה לרשימה</a>' +
       '<div class="card-head"><div class="title"><div>' +
@@ -414,7 +416,7 @@
     const tabs = [
       ['details', 'פרטים'], ['otzarot', 'אוצרות ומאגר'], ['history', 'היסטוריית פעולות', acts.length],
       ['inspections', 'דוחות פיקוח', ins.length], ['tasks', 'משימות', tasks.length + plugs.length + (window.MikvehWork ? MikvehWork.forMikveh(m.id).length : 0)],
-      ['talk', 'דיון', (S.data.messages || []).filter((x) => x.mikvehId === m.id).length], ['whatsapp', 'דיווחי וואטסאפ', (S.wa[m.id] || []).length],
+      ['talk', 'דיון', (S.data.messages || []).filter((x) => x.mikvehId === m.id).length], ['photos', 'תמונות', window.MikvehMedia ? MikvehMedia.photosCount(m) : 0], ['whatsapp', 'דיווחי וואטסאפ', (S.wa[m.id] || []).length],
     ];
     const tabBar = '<div class="tabs">' + tabs.map(([k, t, n]) =>
       '<button type="button" data-tab="' + k + '" class="' + (k === tab ? 'on' : '') + '">' + t + (n != null ? '<span class="n">' + n + '</span>' : '') + '</button>').join('') + '</div>';
@@ -426,6 +428,7 @@
       inspections: renderInspections(ins),
       tasks: (window.MikvehWork ? MikvehWork.renderCardPane(m) : '') + renderCardTasks(tasks, plugs),
       talk: window.MikvehTalk ? MikvehTalk.renderPane(m) : '',
+      photos: window.MikvehMedia ? MikvehMedia.photosPane(m) : '',
       whatsapp: renderWhatsapp(S.wa[m.id] || [], m),
     };
     root.innerHTML = head + tabBar + Object.keys(panes).map((k) => '<div class="pane ' + (k === tab ? 'on' : '') + '" data-pane="' + k + '">' + panes[k] + '</div>').join('');
@@ -436,6 +439,7 @@
       root.querySelectorAll('.pane').forEach((p) => p.classList.toggle('on', p.dataset.pane === b.dataset.tab));
     }));
     $('#cardReport').addEventListener('click', () => openReport(m));
+    $('#cardEdit').addEventListener('click', () => { if (window.MikvehEdit) MikvehEdit.open(m); });
     if (window.MikvehTalk) MikvehTalk.bindPane(root, m);
     if (window.MikvehWork) MikvehWork.bindCardPane(root, m);
     root.querySelectorAll('[data-export]').forEach((b) => b.addEventListener('click', () => {
@@ -459,8 +463,7 @@
     '<div class="panel"><h3>שעות פתיחה</h3>' + dl([
       ['קיץ', esc(m.hoursSummer)], ['חורף', esc(m.hoursWinter)], ['ערב שבת וחג', esc(m.hoursErev)], ['מוצ"ש ויו"ט', esc(m.hoursMotzash)],
     ]) + '</div>' +
-    ((m.notes || m.notes2) ? '<div class="panel"><h3>הערות</h3><p>' + esc([m.notes, m.notes2].filter(Boolean).join(' · ')) + '</p></div>' : '') +
-    (window.MikvehMedia ? MikvehMedia.gallery(m) : '');
+    ((m.notes || m.notes2) ? '<div class="panel"><h3>הערות</h3><p>' + esc([m.notes, m.notes2].filter(Boolean).join(' · ')) + '</p></div>' : '');
   }
 
   function sectionOf(insp, key) {
@@ -1094,6 +1097,8 @@
     initList();
     initReport();
     initUser();
+    $('#navToggle').addEventListener('click', () => document.body.classList.toggle('nav-open'));
+    $('#navBackdrop').addEventListener('click', () => document.body.classList.remove('nav-open'));
     if (window.MikvehAuth) MikvehAuth.init();
     window.addEventListener('hashchange', route);
     route();
