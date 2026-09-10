@@ -6,7 +6,13 @@
 (function () {
   'use strict';
   const POLL_MS = 40000;
-  const EMOJIS = ['👍', '❤️', '😂', '🙏', '✅', '❗'];
+  // תגובות מהירות (מוצגות ישירות על ההודעה) והרחבה מלאה בחלון הבחירה
+  const QUICK = ['👍', '❤️', '😂', '🙏', '✅', '❗'];
+  const EMOJIS = [
+    '👍', '👎', '❤️', '🔥', '😂', '😮', '😢', '🙏',
+    '✅', '❌', '❗', '❓', '👏', '💪', '👌', '🤝',
+    '💧', '🛠', '📷', '📌', '⏰', '🎉', '💡', '😊',
+  ];
   let timer = null, current = '', replyTo = null;
 
   const MK = () => window.MK;
@@ -53,7 +59,10 @@
     list.forEach((r) => { (byEmoji[r.emoji] = byEmoji[r.emoji] || []).push(r.name || ''); });
     const mine = myId();
     const chips = Object.keys(byEmoji).map((e) => '<button type="button" class="react ' + (list.some((r) => r.emoji === e && r.userId === mine) ? 'on' : '') + '" data-emoji="' + esc(e) + '" data-msg="' + esc(m.id) + '" title="' + esc(byEmoji[e].join(', ')) + '">' + e + ' ' + byEmoji[e].length + '</button>').join('');
-    return '<div class="reacts">' + chips + '<button type="button" class="react add" data-add="' + esc(m.id) + '" title="הוסף תגובה">🙂+</button></div>';
+    const used = Object.keys(byEmoji);
+    const quick = QUICK.filter((e) => used.indexOf(e) < 0).slice(0, 4)
+      .map((e) => '<button type="button" class="react quick" data-emoji="' + esc(e) + '" data-msg="' + esc(m.id) + '" title="תגובה מהירה">' + e + '</button>').join('');
+    return '<div class="reacts">' + chips + quick + '<button type="button" class="react add" data-add="' + esc(m.id) + '" title="עוד תגובות">＋</button></div>';
   }
 
   function initials(n) { return String(n || '?').trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join(''); }
@@ -131,9 +140,10 @@
       box.className = 'epick';
       box.innerHTML = EMOJIS.map((x) => '<button type="button">' + x + '</button>').join('');
       document.body.appendChild(box);
-      const r = b.getBoundingClientRect();
-      box.style.top = (r.bottom + 6) + 'px';
-      box.style.left = Math.max(8, Math.min(window.innerWidth - 200, r.left)) + 'px';
+      const r = b.getBoundingClientRect(), h = box.offsetHeight || 120, w = box.offsetWidth || 268;
+      const below = r.bottom + 6 + h < window.innerHeight;
+      box.style.top = (below ? r.bottom + 6 : Math.max(8, r.top - h - 6)) + 'px';
+      box.style.left = Math.max(8, Math.min(window.innerWidth - w - 8, r.left)) + 'px';
       box.querySelectorAll('button').forEach((eb) => eb.addEventListener('click', () => { box.remove(); react(b.dataset.add, eb.textContent, onSent); }));
       setTimeout(() => document.addEventListener('click', () => box.remove(), { once: true }), 0);
     }));
