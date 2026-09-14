@@ -126,11 +126,12 @@
   function openForm(pre) {
     const K = MK();
     if (!K.requireUser()) return;
-    const box = K.$('#editModal');
-    if (!box) return;
-    box.hidden = false;
-    box.innerHTML = '<div class="modal-in"><h3>פתיחת פרויקט</h3>' +
-      '<form id="pForm" class="rform"><div class="fgrid">' +
+    const body = K.$('#editBody');
+    if (!body) return;
+    // #editModal הוא הרקע הכהה בלבד; המבנה הפנימי (modal / modal-head / modal-body)
+    // קבוע ב-index.html, ודריסתו משאירה את הרקע בלי החלון הלבן.
+    K.$('#editTitle').textContent = 'פתיחת פרויקט';
+    body.innerHTML = '<form id="pForm" class="rform" novalidate><div class="fgrid">' +
       '<div class="ff wide"><label>שם המקווה <span class="req">*</span></label>' +
         '<input id="pMikveh" type="text" required value="' + esc((pre && pre.mikveh) || '') + '">' +
         '<small class="hint">אפשר גם מקווה שעדיין אינו בבסיס הנתונים — פרויקט בנייה נפתח לפניו.</small></div>' +
@@ -143,28 +144,29 @@
       '<div class="ff wide"><label>הערה</label><textarea id="pNote" rows="2"></textarea></div>' +
       '</div><div class="factions"><button class="btn primary" type="submit">פתיחה</button>' +
       '<button class="btn" type="button" id="pCancel">ביטול</button>' +
-      '<span class="fmsg" id="pMsg"></span></div></form></div>';
+      '<span class="fmsg" id="pMsg"></span></div></form>';
 
-    box.querySelector('#pCancel').addEventListener('click', () => { box.hidden = true; });
-    box.querySelector('#pForm').addEventListener('submit', (e) => {
+    K.$('#editModal').hidden = false;
+    K.$('#pCancel').addEventListener('click', () => { K.$('#editModal').hidden = true; });
+    K.$('#pForm').addEventListener('submit', (e) => {
       e.preventDefault();
-      const msg = box.querySelector('#pMsg');
+      const msg = K.$('#pMsg');
       const data = {
-        mikveh: box.querySelector('#pMikveh').value.trim(),
-        place: box.querySelector('#pPlace').value.trim(),
-        type: box.querySelector('#pType').value,
-        supervisor: box.querySelector('#pSup').value.trim(),
-        contractor: box.querySelector('#pCon').value.trim(),
-        startDate: box.querySelector('#pStart').value,
-        targetDate: box.querySelector('#pTarget').value,
-        note: box.querySelector('#pNote').value.trim(),
+        mikveh: K.$('#pMikveh').value.trim(),
+        place: K.$('#pPlace').value.trim(),
+        type: K.$('#pType').value,
+        supervisor: K.$('#pSup').value.trim(),
+        contractor: K.$('#pCon').value.trim(),
+        startDate: K.$('#pStart').value,
+        targetDate: K.$('#pTarget').value,
+        note: K.$('#pNote').value.trim(),
       };
       if (!data.mikveh) { msg.textContent = 'חסר שם מקווה'; msg.className = 'fmsg bad'; return; }
       msg.textContent = 'שומר...'; msg.className = 'fmsg';
       K.DataSource.post('addProject', data).then((res) => {
         (K.S.data.projects = K.S.data.projects || []).unshift(res.record);
         if (res.message) K.S.data.messages.push(res.message);
-        box.hidden = true;
+        K.$('#editModal').hidden = true;
         K.toast('הפרויקט נפתח');
         refreshNav();
         location.hash = '#/projects';
