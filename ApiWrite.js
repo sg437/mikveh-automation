@@ -39,7 +39,7 @@ const WRITE = {
 
 /** פעולות שמשנות את הנתונים שנשמרים במטמון של ?action=data. */
 const HEAVY_WRITES = ['addAction', 'addInspection', 'addMikveh', 'updateMikveh',
-  'addProject', 'updateProject', 'updateProjectStage'];
+  'addProject', 'updateProject', 'updateProjectStage', 'completeProject'];
 
 function apiWritePost_(e, action) {
   try {
@@ -89,6 +89,7 @@ function apiWritePost_(e, action) {
       if (action === 'addProject') return jsonResponse_(addProject_(ss, data, user));
       if (action === 'updateProject') return jsonResponse_(updateProject_(ss, data, user));
       if (action === 'updateProjectStage') return jsonResponse_(updateProjectStage_(ss, data, user));
+      if (action === 'completeProject') return jsonResponse_(completeProject_(ss, data, user));
       if (action === 'saveContractor') return jsonResponse_(saveContractor_(ss, data, user));
       if (action === 'notifyContractor') return jsonResponse_(notifyContractor_(ss, data, user));
     } finally {
