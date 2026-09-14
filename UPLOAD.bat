@@ -4,8 +4,10 @@ title Mikveh - upload to Apps Script
 setlocal EnableExtensions
 cd /d "%~dp0"
 
-rem Mirrors sync.bat. If clasp works without this line, it can be removed.
-set NODE_TLS_REJECT_UNAUTHORIZED=0
+rem NOTE: sync.bat sets NODE_TLS_REJECT_UNAUTHORIZED=0. It is deliberately NOT
+rem set here: it disables TLS certificate checks, and this script performs a
+rem Google sign-in. If npx fails with a certificate error, that is the one case
+rem where adding it back may be needed - ask before doing so.
 
 echo.
 echo =====================================================
