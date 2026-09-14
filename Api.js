@@ -123,6 +123,55 @@ function apiPing_() {
   return out;
 }
 
+/**
+ * מדידת זמני הטעינה – להרצה מהעורך (Run ▶) ואז "יומן ביצוע".
+ * מראה כמה זמן לוקחת כל לשונית וכמה גדולה התשובה, כדי לדעת מה באמת מאט
+ * את פתיחת האפליקציה במקום לנחש.
+ */
+function testApiSpeed() {
+  const t0 = Date.now();
+  const ss = apiSpreadsheet_();
+  Logger.log('פתיחת הגיליון: %s ms', Date.now() - t0);
+
+  const parts = [
+    ['מקוואות', function () { return apiMikvaot_(ss); }],
+    ['פעולות', function () { return apiActions_(ss); }],
+    ['דוחות פיקוח', function () { return apiInspections_(ss); }],
+    ['משימות', function () { return apiTasks_(ss); }],
+    ['פקקים', function () { return apiPlugs_(ss); }],
+    ['דיווחי וואטסאפ', function () { return apiWhatsapp_(); }],
+    ['הודעות דיונים', function () { return apiMessages_(ss, ''); }],
+    ['שיבוצים', function () { return apiWork_(ss); }],
+    ['מדיה', function () { return apiMedia_(ss); }],
+    ['קבוצות דיון', function () { return apiGroups_(ss); }],
+    ['תגובות', function () { return apiReactions_(ss); }],
+    ['קבלנים', function () { return apiContractors_(ss); }],
+    ['פניות לקבלן', function () { return apiContractorMsgs_(ss); }]
+  ];
+
+  let total = 0, bytes = 0;
+  parts.forEach(function (p) {
+    const t = Date.now();
+    let n = 0, size = 0;
+    try {
+      const res = p[1]();
+      const json = JSON.stringify(res || null);
+      size = json.length;
+      n = Array.isArray(res) ? res.length : Object.keys(res || {}).length;
+    } catch (err) {
+      Logger.log('%-18s שגיאה: %s', p[0], err.message);
+      return;
+    }
+    const ms = Date.now() - t;
+    total += ms; bytes += size;
+    Logger.log('%-18s %6s ms   %6s רשומות   %7s KB', p[0], ms, n, Math.round(size / 1024));
+  });
+
+  Logger.log('—'.repeat(46));
+  Logger.log('סך הכל: %s ms, גודל התשובה כ-%s KB', total, Math.round(bytes / 1024));
+  Logger.log('כל רענון באפליקציה מבצע את כל זה מחדש.');
+}
+
 /** גיליון המקוואות (לפי MIKVAOT_SHEET_ID). */
 function apiSpreadsheet_() {
   const id = getProp_(API.SHEET_ID_PROP);
