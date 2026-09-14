@@ -56,7 +56,7 @@
       ['קליטת פעולות מהוואטסאפ', p.waAutoActions ? OK : NO('WA_AUTO_ACTIONS=1')],
       ['התראות בוואטסאפ', p.notifyWhatsapp && p.greenApi ? OK : NO('NOTIFY_WHATSAPP=1', '+ חיבור Green API')],
       ['תזכורות תעודה', p.alertChat ? OK : NO('ALERT_CHAT_ID')],
-      ['שליחה לקבוצת הוואטסאפ', p.waBridge ? OK + ' <small>– דיווחים ופיקוח נשלחים גם לקבוצה</small>'
+      ['תכנון עבודה לקבוצת הוואטסאפ', p.waBridge ? OK + ' <small>– פתיחת משימות לחלוקה מודיעה לקבוצה</small>'
         : NO('WA_BRIDGE=1', '+ GROUP_CHAT_ID')],
       ['מי רשאי להיכנס', p.openSignup
         ? '<span class="badge warn">כל חשבון Google</span> נרשם לבד כ<b>' + esc(p.defaultRole || 'מפקח') + '</b>' +

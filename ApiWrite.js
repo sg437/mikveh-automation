@@ -125,11 +125,14 @@ function dateOf_(s) {
 }
 
 /**
- * גשר לקבוצת הוואטסאפ: שולח לקבוצת הדיווחים סיכום של דיווח שנרשם במערכת,
- * כדי שמי שעדיין עובד בקבוצה יראה אותו בתקופת המעבר. פעיל רק כש-WA_BRIDGE=1.
+ * גשר לקבוצת הוואטסאפ: מודיע לקבוצת הדיווחים על **תכנון עבודה** שנפתח
+ * במערכת – אילו מקוואות ממתינים למילוי, לריקון או לחידוש תעודה – כדי שמי
+ * שעדיין עובד בקבוצה ידע מה מחכה לו. פעיל רק כש-WA_BRIDGE=1.
  *
- * נשלח רק על דיווחי פעולות ודוחות פיקוח – לא על שיחות הדיונים, שהיו מציפות
- * את הקבוצה.
+ * מה שלא נשלח, במכוון:
+ *   - דיווחי פעולות ודוחות פיקוח. דיווח שמקורו בקבוצה היה חוזר אליה כהד,
+ *     ודיווח שנרשם באפליקציה אינו מעניין את הקבוצה – הוא כבר בתיק המקווה.
+ *   - שיחות הדיונים, שהיו מציפות את הקבוצה.
  *
  * אין סכנת לולאה: הקולט ב-קוד.js מקבל רק incomingMessageReceived
  * (CONFIG.ACCEPTED_WEBHOOKS), והודעה שנשלחת דרך ה-API מייצרת webhook יוצא –
@@ -192,8 +195,6 @@ function writeAction_(ss, d, user) {
     reservoirSealed: row[14], note2: row[15], liters: row[19] || null, validMonth: row[20], validYear: row[21],
     mikvehId: apiNorm_(mikveh), source: 'app', by: user.name,
   });
-  bridgeToGroup_('📝 ' + user.name + ' דיווח/ה במערכת\n' + mikveh + ' — ' + action +
-    (row[6] ? ' (' + row[6] + ')' : '') + (row[10] ? '\n' + row[10] : ''));
   return { ok: true, record: record };
 }
 
@@ -214,7 +215,6 @@ function writeInspection_(ss, d, user) {
   row[3] = txt_(d.contact, 80);
   row[4] = txt_(d.phone, 40);
   sh.appendRow(row);
-  bridgeToGroup_('📋 דוח פיקוח חדש נרשם במערכת\n' + mikveh + ' — ' + (row[2] || user.name));
   return { ok: true, record: { ts: apiIsoDate_(when), mikveh: mikveh, mikvehId: apiNorm_(mikveh), rabbi: row[2], by: user.name } };
 }
 
@@ -346,6 +346,9 @@ function addWorkItems_(ss, d, user) {
   // התראה למפקחים ולמנהלים (חוץ מהפותח)
   notifyUsers_(authUsers_(ss).filter(function (u) { return u.active && u.phone && (u.role === 'מפקח' || u.role === 'מנהל') && u.name !== user.name; }),
     '📋 ' + user.name + ' פתח/ה ' + records.length + ' משימות לחלוקה (' + typeLabel + '): ' + names.slice(0, 15).join(', ') + (names.length > 15 ? ' ועוד' : '') + '\n\nלבחירה: מערכת המקוואות ➜ חלוקת עבודה ➜ "אני לוקח"');
+  bridgeToGroup_('📋 תכנון עבודה חדש (' + typeLabel + ') — ' + records.length + ' מקוואות\n' +
+    names.slice(0, 20).join(', ') + (names.length > 20 ? ' ועוד ' + (names.length - 20) : '') +
+    '\n\nלבחירה: מערכת המקוואות ➜ חלוקת עבודה');
   return { ok: true, records: records, message: msg.record || null, skipped: skipped };
 }
 
