@@ -126,14 +126,30 @@ function doGet(e) {
 // ==================== הלוגיקה המרכזית ====================
 
 function handleNotification_(data) {
+  const md = data.messageData || {};
+  const sd = data.senderData || {};
+  const typeMessage = md.typeMessage || '';
+
+  // 0. הצבעה בסקר חלוקת העבודה (WorkPoll.js) — לפני כל סינון.
+  //    הצבעה של חבר בקבוצה מגיעה כ-incomingMessageReceived, אבל הצבעה
+  //    של בעל המכשיר שמחובר ל-Green API מגיעה כהודעה **יוצאת**
+  //    (outgoingMessageReceived), ולכן סינון סוגי ה-webhook היה מבליע אותה.
+  //    הזיהוי נעשה לפי מזהה הסקר מול הסקרים שהמערכת שלחה, ולכן אין צורך
+  //    בסינון הקבוצה. כפילויות נחסמות במטמון (הצבעה אינה נכנסת לתור).
+  if (typeMessage === 'pollUpdateMessage') {
+    const pollMsgId = data.idMessage || '';
+    const cache = CacheService.getScriptCache();
+    if (pollMsgId && cache.get('poll_' + pollMsgId)) {
+      return { status: 'duplicate', idMessage: pollMsgId };
+    }
+    if (pollMsgId) cache.put('poll_' + pollMsgId, '1', 21600);
+    return handlePollUpdate_(data);
+  }
+
   // 1. מסננים סוגי Webhook שלא רלוונטיים (סטטוסים, הודעות יוצאות וכו')
   if (CONFIG.ACCEPTED_WEBHOOKS.indexOf(data.typeWebhook) === -1) {
     return { status: 'ignored', reason: 'webhook type: ' + data.typeWebhook };
   }
-
-  const md = data.messageData || {};
-  const sd = data.senderData || {};
-  const typeMessage = md.typeMessage || '';
 
   // 2. מתעלמים מתגובות-אימוג'י וכדומה
   if (CONFIG.IGNORED_TYPES.indexOf(typeMessage) !== -1) {
@@ -162,13 +178,6 @@ function handleNotification_(data) {
     // 5. בדיקת כפילויות לפי idMessage — קודם במטמון מהיר, ואז בגיליון
     if (isDuplicate_(idMessage)) {
       return { status: 'duplicate', idMessage: idMessage };
-    }
-
-    // 5ב. הצבעה בסקר חלוקת העבודה — נרשמת ישירות בלשונית "שיבוצים" (WorkPoll.js)
-    //     ואינה נכנסת לתור: אין בה דיווח לעיבוד בג'מיני.
-    if (typeMessage === 'pollUpdateMessage') {
-      CacheService.getScriptCache().put('msg_' + idMessage, '1', 21600);
-      return handlePollUpdate_(data);
     }
 
     // 6. איחוד הטקסט — המקבילה של נוסחת ifempty הישנה
