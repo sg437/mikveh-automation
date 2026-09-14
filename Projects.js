@@ -161,7 +161,26 @@ function updateProject_(ss, d, user) {
   return { ok: true, record: rec };
 }
 
-/** עדכון שלב בצ'ק-ליסט. data: {id, stage, status, date, note} */
+/**
+ * על שם מי נרשם השלב. ברירת המחדל היא מי שמחובר; מנהל רשאי לרשום את השלב על
+ * שם מפקח אחר, אך רק על שם משתמש פעיל שקיים במערכת – כדי שלא ייווצרו שמות
+ * חופשיים בגיליון. שלב שחוזר ל"ממתין" נשאר בלי שם.
+ *
+ * prev הוא השם שכבר רשום בשורה. מנהל שנוגע רק בהערה או בתאריך אינו מעביר
+ * בכך את השלב על שמו, וגם שם ישן שאינו ברשימת המשתמשים נשמר כמות שהוא.
+ */
+function projectStageBy_(ss, wanted, user, status, prev) {
+  if (status === 'ממתין') return '';
+  const name = txt_(wanted, 80);
+  if (!name || name === user.name) return user.name;
+  if (name === txt_(prev, 80)) return name;
+  if (user.role !== 'מנהל') return user.name;
+  if (typeof authUsers_ !== 'function') return user.name;
+  const match = authUsers_(ss).filter(function (u) { return u.active && u.name === name; })[0];
+  return match ? match.name : user.name;
+}
+
+/** עדכון שלב בצ'ק-ליסט. data: {id, stage, status, date, note, by} */
 function updateProjectStage_(ss, d, user) {
   const pid = String(d.id || '');
   const key = String(d.stage || '');
@@ -178,10 +197,11 @@ function updateProjectStage_(ss, d, user) {
       if (String(keys[i][0]) === pid && apiClean_(keys[i][1]) === key) { rowNum = i + 2; break; }
     }
   }
+  const prevBy = rowNum > 0 ? apiClean_(sh.getRange(rowNum, 5).getValue()) : '';
   const now = new Date();
   // "אושר" ללא תאריך מקבל את היום, כדי שתמיד יהיה תיעוד מתי אושר השלב
   const when = d.date ? dateOf_(d.date) : (status === 'אושר' ? now : '');
-  const row = [pid, key, status, when, status === 'ממתין' ? '' : user.name, txt_(d.note, 500), now];
+  const row = [pid, key, status, when, projectStageBy_(ss, d.by, user, status, prevBy), txt_(d.note, 500), now];
   if (rowNum < 0) sh.appendRow(row); else sh.getRange(rowNum, 1, 1, row.length).setValues([row]);
 
   const rec = apiCompact_({ status: status, date: apiIsoDate_(when) || null, by: row[4], note: row[5], updated: apiIsoDate_(now) });

@@ -7,13 +7,14 @@
  * בכניסה הראשונה, וכל פעולה נרשמת על שם המשתמש.
  *
  * תפקידים: מנהל (הכל, כולל ניהול משתמשים) · מפקח (דיווחים, משימות, דיונים) ·
- *          בלנית (דיווחים ודיונים) · צופה (קריאה בלבד).
+ *          קבלן (דיווחים ודיונים) · צופה (קריאה בלבד).
+ * "בלנית" היה שמו הקודם של תפקיד "קבלן"; ערך ישן בגיליון מתורגם אוטומטית.
  * המשתמש הראשון שנכנס הופך למנהל. משתמש חדש מקבל את DEFAULT_ROLE (ברירת מחדל: מפקח).
  *
  * הגדרות (Script Properties):
  *   GOOGLE_CLIENT_ID — מזהה ה-OAuth Client (Web application) מ-Google Cloud Console.
  *                      אותו ערך גם ב-app/config.js (googleClientId).
- *   DEFAULT_ROLE     — (רשות) תפקיד למשתמש חדש: מפקח / בלנית / צופה.
+ *   DEFAULT_ROLE     — (רשות) תפקיד למשתמש חדש: מפקח / קבלן / צופה.
  *   NOTIFY_WHATSAPP  — (רשות) 1 = התראות אישיות בוואטסאפ (אזכורים, משימות).
  *
  * עד שמוגדר GOOGLE_CLIENT_ID, הכתיבה עובדת במצב הישן (שם חופשי מהמכשיר).
@@ -25,7 +26,8 @@ const AUTH = {
   SESSIONS_SHEET: 'סשנים',
   SESSIONS_HEADERS: ['טוקן', 'מזהה משתמש', 'שם', 'תפקיד', 'נוצר', 'תוקף'],
   SESSION_DAYS: 90,
-  ROLES: ['מנהל', 'מפקח', 'בלנית', 'צופה'],
+  ROLES: ['מנהל', 'מפקח', 'קבלן', 'צופה'],
+  ROLE_ALIASES: { 'בלנית': 'קבלן' }, // שמות תפקיד ישנים שנשמרו בגיליון
   OPEN_SIGNUP_PROP: 'OPEN_SIGNUP',
   CACHE_SEC: 600,
   PERMS_SHEET: 'הרשאות',
@@ -34,6 +36,15 @@ const AUTH = {
 };
 
 function authEnabled_() { return !!getProp_(AUTH.CLIENT_ID_PROP); }
+
+/**
+ * שם תפקיד תקני. תפקיד שהוסב ("בלנית" ⟵ "קבלן") ממשיך לעבוד גם אם נשאר
+ * בגיליון בשמו הישן, כך שאין צורך לתקן שורות קיימות ביד.
+ */
+function authRole_(role) {
+  const r = String(role == null ? '' : role).trim();
+  return AUTH.ROLE_ALIASES[r] || r;
+}
 
 function authSheet_(ss, name, headers) {
   let sh = ss.getSheetByName(name);
@@ -55,7 +66,7 @@ function authUsers_(ss) {
   values.forEach(function (v, i) {
     if (!v[0]) return;
     out.push({ id: String(v[0]), name: apiClean_(v[1]) || '', email: (apiClean_(v[2]) || '').toLowerCase(), phone: apiClean_(v[3]) || '',
-      role: apiClean_(v[4]) || 'מפקח', active: String(v[5]) !== 'לא', created: apiIso_(v[6]), lastLogin: apiIso_(v[7]),
+      role: authRole_(apiClean_(v[4])) || 'מפקח', active: String(v[5]) !== 'לא', created: apiIso_(v[6]), lastLogin: apiIso_(v[7]),
       googleId: apiClean_(v[8]) || '', picture: apiClean_(v[9]) || '', rowNum: i + 2 });
   });
   return out;
@@ -104,7 +115,8 @@ function authLogin_(ss, d) {
       return { error: 'אין לך הרשאה להיכנס למערכת. פנה למנהל כדי שיוסיף את הכתובת ' + g.email + '.' };
     } else {
       // רישום פתוח (OPEN_SIGNUP=1): כל חשבון Google נרשם לבד עם DEFAULT_ROLE.
-      const role = AUTH.ROLES.indexOf(getProp_(AUTH.DEFAULT_ROLE_PROP)) >= 0 ? getProp_(AUTH.DEFAULT_ROLE_PROP) : 'מפקח';
+      const wanted = authRole_(getProp_(AUTH.DEFAULT_ROLE_PROP));
+      const role = AUTH.ROLES.indexOf(wanted) >= 0 ? wanted : 'מפקח';
       u = { id: Utilities.getUuid(), name: g.name, email: g.email, phone: '', role: role, active: true, googleId: g.sub, picture: g.picture };
       sh.appendRow([u.id, u.name, u.email, '', u.role, 'כן', new Date(), new Date(), u.googleId, u.picture]);
     }
@@ -172,7 +184,7 @@ function authAdmin_(ss, action, d, admin) {
     const email = String(d.email || '').trim().toLowerCase();
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return { error: 'כתובת אימייל לא תקינה' };
     if (users.some(function (u) { return u.email === email; })) return { error: 'המשתמש כבר קיים' };
-    const role = AUTH.ROLES.indexOf(d.role) >= 0 ? d.role : 'מפקח';
+    const role = AUTH.ROLES.indexOf(authRole_(d.role)) >= 0 ? authRole_(d.role) : 'מפקח';
     const id = Utilities.getUuid();
     sh.appendRow([id, String(d.name || email).trim(), email, String(d.phone || '').trim(), role, 'כן', new Date(), '', '', '']);
     return { ok: true, user: { id: id, name: String(d.name || email).trim(), email: email, phone: String(d.phone || ''), role: role, active: true } };
@@ -182,9 +194,10 @@ function authAdmin_(ss, action, d, admin) {
   if (action === 'updateUser') {
     if (d.name) sh.getRange(u.rowNum, 2).setValue(String(d.name).trim());
     if (d.phone !== undefined) sh.getRange(u.rowNum, 4).setValue(String(d.phone || '').trim());
-    if (d.role && AUTH.ROLES.indexOf(d.role) >= 0) {
-      if (u.id === admin.id && d.role !== 'מנהל') return { error: 'אי אפשר להוריד לעצמך את הרשאת המנהל' };
-      sh.getRange(u.rowNum, 5).setValue(d.role);
+    const newRole = authRole_(d.role);
+    if (newRole && AUTH.ROLES.indexOf(newRole) >= 0) {
+      if (u.id === admin.id && newRole !== 'מנהל') return { error: 'אי אפשר להוריד לעצמך את הרשאת המנהל' };
+      sh.getRange(u.rowNum, 5).setValue(newRole);
     }
     if (d.active !== undefined) {
       if (u.id === admin.id && !d.active) return { error: 'אי אפשר להשבית את עצמך' };
@@ -243,22 +256,22 @@ function authUpdateMe_(ss, d, user) {
 
 // ---- טבלת הרשאות: מה כל תפקיד רשאי לעשות (ניתן לעריכה במסך ההגדרות) ----
 const PERM_ACTIONS = [
-  { key: 'addAction', label: 'דיווח פעולה (החלפה, ריקון, תעודה...)', def: { 'מפקח': 1, 'בלנית': 1 } },
+  { key: 'addAction', label: 'דיווח פעולה (החלפה, ריקון, תעודה...)', def: { 'מפקח': 1, 'קבלן': 1 } },
   { key: 'addInspection', label: 'דו"ח פיקוח כשרות', def: { 'מפקח': 1 } },
-  { key: 'addMessage', label: 'כתיבה בדיונים', def: { 'מפקח': 1, 'בלנית': 1 } },
-  { key: 'addMedia', label: 'העלאת תמונות, סרטונים והקלטות', def: { 'מפקח': 1, 'בלנית': 1 } },
-  { key: 'react', label: 'תגובות אימוג\'י', def: { 'מפקח': 1, 'בלנית': 1, 'צופה': 1 } },
+  { key: 'addMessage', label: 'כתיבה בדיונים', def: { 'מפקח': 1, 'קבלן': 1 } },
+  { key: 'addMedia', label: 'העלאת תמונות, סרטונים והקלטות', def: { 'מפקח': 1, 'קבלן': 1 } },
+  { key: 'react', label: 'תגובות אימוג\'י', def: { 'מפקח': 1, 'קבלן': 1, 'צופה': 1 } },
   { key: 'addGroup', label: 'פתיחת קבוצות דיון', def: { 'מפקח': 1 } },
   { key: 'updateGroup', label: 'עריכת קבוצות דיון', def: { 'מפקח': 1 } },
   { key: 'addWorkItems', label: 'פתיחת משימות לחלוקה', def: { 'מפקח': 1 } },
-  { key: 'updateWorkItem', label: 'לקיחת משימה וסימון ביצוע', def: { 'מפקח': 1, 'בלנית': 1 } },
+  { key: 'updateWorkItem', label: 'לקיחת משימה וסימון ביצוע', def: { 'מפקח': 1, 'קבלן': 1 } },
   { key: 'updateMikveh', label: 'עריכת פרטי מקווה', def: { 'מפקח': 1 } },
   { key: 'addMikveh', label: 'הוספת מקווה חדש', def: { 'מפקח': 1 } },
   { key: 'addProject', label: 'פתיחת פרויקט בנייה / שיפוץ', def: { 'מפקח': 1 } },
   { key: 'updateProject', label: 'עריכת פרטי פרויקט', def: { 'מפקח': 1 } },
   { key: 'updateProjectStage', label: 'אישור שלב בצ\'ק-ליסט הבנייה', def: { 'מפקח': 1 } },
 ];
-const PERM_ROLES = ['מפקח', 'בלנית', 'צופה']; // מנהל תמיד הכל
+const PERM_ROLES = ['מפקח', 'קבלן', 'צופה']; // מנהל תמיד הכל
 
 function permsSheet_(ss) {
   let sh = ss.getSheetByName(AUTH.PERMS_SHEET);
@@ -270,7 +283,15 @@ function permsSheet_(ss) {
     });
     sh.setFrozenRows(1);
     sh.setRightToLeft(true);
+    return sh;
   }
+  // כותרת בשם תפקיד ישן ("בלנית") מוחלפת בשם הנוכחי. הקריאה עצמה לפי מיקום
+  // העמודה, ולכן ההרשאות שכבר נקבעו נשמרות כמות שהן.
+  const head = sh.getRange(1, 3, 1, PERM_ROLES.length).getValues()[0];
+  head.forEach(function (v, i) {
+    const fixed = authRole_(v);
+    if (fixed && fixed !== String(v).trim()) sh.getRange(1, 3 + i).setValue(fixed);
+  });
   return sh;
 }
 
