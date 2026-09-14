@@ -845,7 +845,7 @@
   // ============================================================ תכנון עבודה
   const PLAN = { init: false, certChip: 'soon3', drainChip: 'all', certs: [], drained: [], planned: [] };
   const CERT_CHIPS = [['expired', 'פג תוקף'], ['month', 'החודש'], ['soon3', '3 חודשים'], ['soon6', '6 חודשים'], ['year', 'השנה הקרובה'], ['all', 'כל התעודות']];
-  const DRAIN_CHIPS = [['all', 'כל הממתינים'], ['d30', '30+ ימים'], ['d90', '90+ ימים'], ['plug', 'עם פקק על הגג']];
+  const DRAIN_CHIPS = [['all', 'כל הממתינים'], ['d7', '7+ ימים'], ['d30', '30+ ימים'], ['d90', '90+ ימים'], ['plug', 'עם פקק על הגג']];
 
   function certRows() {
     const today = new Date(); today.setHours(0, 0, 0, 0);
@@ -950,7 +950,7 @@
   function drawDrained() {
     const region = $('#drainRegion').value;
     const base = PLAN.drained.filter((d) => !region || d.m.region === region);
-    const f = (d, chip) => chip === 'all' || (chip === 'd30' && d.days >= 30) || (chip === 'd90' && d.days >= 90) || (chip === 'plug' && !!d.plug);
+    const f = (d, chip) => chip === 'all' || (chip === 'd7' && d.days >= 7) || (chip === 'd30' && d.days >= 30) || (chip === 'd90' && d.days >= 90) || (chip === 'plug' && !!d.plug);
     $('#drainChips').querySelectorAll('[data-chip]').forEach((b) => { b.classList.toggle('on', b.dataset.chip === PLAN.drainChip); b.querySelector('.n').textContent = base.filter((d) => f(d, b.dataset.chip)).length; });
     const list = base.filter((d) => f(d, PLAN.drainChip));
     PLAN.drainedShown = list;

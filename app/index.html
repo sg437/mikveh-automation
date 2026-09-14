@@ -21,6 +21,17 @@
   }
   *{box-sizing:border-box;margin:0;padding:0}
   .legal-links{margin:16px 0 6px;font-size:.85rem;color:var(--muted);text-align:center}
+  .mwrap{position:relative;display:inline-block;max-width:100%}
+  .msave{position:absolute;inset-inline-end:5px;bottom:5px;background:rgba(18,36,48,.78);color:#fff;
+    border-radius:6px;padding:2px 7px;font-size:.72rem;text-decoration:none;line-height:1.5}
+  .msave:hover{background:rgba(18,36,48,.95)}
+  .msg.sys .sys-work{margin-top:8px;display:flex;flex-direction:column;gap:3px;text-align:start}
+  .msg.sys .swi{display:flex;align-items:center;gap:7px;padding:4px 7px;border:1px solid var(--line);
+    border-radius:7px;background:var(--card);cursor:pointer;font-size:.9rem}
+  .msg.sys .swi.taken{opacity:.7}
+  .msg.sys .swi .swn{flex:1;font-weight:700}
+  .msg.sys .swi small{color:var(--muted)}
+  .msg.sys .swh{margin-top:4px;font-size:.75rem;color:var(--muted);text-align:center}
   .btn.danger{color:var(--bad);border-color:var(--bad)}
   .btn.danger:hover{background:var(--bad-soft)}
   .cell-input{width:120px;max-width:100%;padding:4px 7px;border:1px solid var(--line);border-radius:6px;background:var(--card);direction:ltr;text-align:start}

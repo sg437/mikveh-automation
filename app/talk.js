@@ -42,13 +42,34 @@
     return g.open || !id || g.members.indexOf(id) >= 0;
   }
 
+  /**
+   * המשימות שנפתחו יחד עם הודעת מערכת מסוימת.
+   * הן נוצרות באותה קריאה, ולכן חולקות את שם הפותח, את סוג המשימה שמופיע
+   * בסוגריים בטקסט, וחותמת זמן במרחק שניות ספורות מההודעה.
+   */
+  const WORK_LABELS = { fill: 'מילוי מאגר / החלפת אוצר', cert: 'חידוש תעודה', other: 'משימה' };
+  function worksFor(m) {
+    if (m.source !== 'system' || !/משימות לחלוקה/.test(m.text || '')) return [];
+    const t = MK().parseISO(m.ts);
+    if (!t) return [];
+    const label = (String(m.text || '').match(/\(([^)]+)\)/) || [])[1] || '';
+    return (MK().S.data.work || []).filter(function (w) {
+      if (w.by !== m.author) return false;
+      const wt = MK().parseISO(w.ts);
+      if (!wt || Math.abs(wt - t) > 15000) return false;
+      return !label || (WORK_LABELS[w.type] || '') === label;
+    });
+  }
+
   function channels() {
     const map = {};
     all().forEach((m) => { const k = chOf(m); const c = map[k] || (map[k] = { id: k, count: 0, last: '' }); c.count++; if ((m.ts || '') > c.last) c.last = m.ts; });
     const mine = myId();
     const gs = groups().filter((g) => g.open || !mine || g.members.indexOf(mine) >= 0)
       .map((g) => ({ id: 'g:' + g.id, count: (map['g:' + g.id] || {}).count || 0, last: (map['g:' + g.id] || {}).last || g.ts || '', group: true }));
-    const mikvaot = Object.keys(map).filter((k) => k && !isGroup(k)).map((k) => map[k]).sort((a, b) => b.last.localeCompare(a.last));
+    // מיון לפי שם המקווה בא"ב עברי – קל יותר לאתר מקווה מסוים מאשר לפי זמן ההודעה האחרונה
+    const mikvaot = Object.keys(map).filter((k) => k && !isGroup(k)).map((k) => map[k])
+      .sort((a, b) => String(name(a.id)).localeCompare(String(name(b.id)), 'he'));
     return { general: { id: '', count: (map[''] || {}).count || 0, last: (map[''] || {}).last || '' }, groups: gs.sort((a, b) => b.last.localeCompare(a.last)), mikvaot };
   }
 
@@ -84,9 +105,25 @@
     const q = m.replyTo ? all().find((x) => x.id === m.replyTo) : null;
     if (m.source === 'system') {
       // הודעה על משימות לחלוקה מקבלת קישור ישיר למסך, במקום הפניה מילולית
-      const link = /חלוקת עבודה|משימות לחלוקה/.test(m.text || '')
-        ? '<div class="sys-act"><a class="btn small" href="#/work">פתח את חלוקת העבודה ➜</a></div>' : '';
-      return '<div class="msg sys" data-id="' + esc(m.id) + '"><div class="mb">' + esc(m.text || '') + '</div>' + link +
+      const items = worksFor(m);
+      let extra = '';
+      if (items.length) {
+        const meName = K.getUser().name;
+        extra = '<div class="sys-work">' + items.map(function (w) {
+          const taken = w.status !== 'open';
+          const mineTaken = w.takenBy === meName;
+          const nm = (K.S.byId[w.mikvehId] || {}).name || w.mikveh || w.mikvehId;
+          return '<label class="swi' + (taken ? ' taken' : '') + '">' +
+            '<input type="checkbox" data-take="' + esc(w.id) + '"' + (taken ? ' checked' : '') +
+            (taken && !mineTaken ? ' disabled' : '') + '>' +
+            '<span class="swn">' + esc(nm) + '</span>' +
+            (taken ? '<small>' + esc(w.status === 'done' ? 'בוצע' : 'נלקח') + ' · ' + esc(w.takenBy || '') + '</small>' : '') +
+            '</label>';
+        }).join('') + '<div class="swh">סמן/י ליד מקווה כדי לקחת אותו. הסרת הסימון משחררת.</div></div>';
+      } else if (/חלוקת עבודה|משימות לחלוקה/.test(m.text || '')) {
+        extra = '<div class="sys-act"><a class="btn small" href="#/work">פתח את חלוקת העבודה ➜</a></div>';
+      }
+      return '<div class="msg sys" data-id="' + esc(m.id) + '"><div class="mb">' + esc(m.text || '') + '</div>' + extra +
         '<div class="mh"><span class="mt">' + esc(K.hebOf(m.ts)) + ' · ' + esc(K.fmtDate(m.ts)) + '</span></div></div>';
     }
     const time = K.parseISO(m.ts) ? K.parseISO(m.ts).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' }) : '';
@@ -138,6 +175,23 @@
       const ta = root.querySelector('textarea'); if (ta) ta.focus();
     }));
     // תגובות אימוג'י
+    root.querySelectorAll('[data-take]').forEach((cb) => cb.addEventListener('change', () => {
+      const K = MK();
+      if (!K.requireUser()) { cb.checked = !cb.checked; return; }
+      const id = cb.dataset.take;
+      const w = (K.S.data.work || []).find((x) => x.id === id);
+      if (!w) return;
+      const want = cb.checked ? 'taken' : 'open';
+      cb.disabled = true;
+      K.DataSource.post('updateWorkItem', { id: id, status: want }).then((res) => {
+        if (res.record) Object.assign(w, res.record);
+        if (res.message && !K.S.data.messages.some((x) => x.id === res.message.id)) K.S.data.messages.push(res.message);
+        const nav = K.$('#navCountWork');
+        if (nav) nav.textContent = (K.S.data.work || []).filter((x) => x.status !== 'done').length;
+        K.toast(want === 'taken' ? 'נרשם עליך' : 'שוחרר');
+        onSent();
+      }).catch((err) => { cb.checked = !cb.checked; cb.disabled = false; K.toast('לא נשמר: ' + err.message); });
+    }));
     root.querySelectorAll('[data-emoji]').forEach((b) => b.addEventListener('click', () => react(b.dataset.msg, b.dataset.emoji, onSent)));
     root.querySelectorAll('[data-add]').forEach((b) => b.addEventListener('click', (e) => {
       e.stopPropagation();
