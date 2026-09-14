@@ -8,7 +8,7 @@
   const esc = (s) => MK().esc(s);
 
   function render() {
-    const K = MK(), root = K.$('#view-settings');
+    const K = MK(), root = K.$('#permsBox') || K.$('#view-settings');
     const me = window.MikvehAuth ? MikvehAuth.me() : null;
     const authOn = window.MikvehAuth && MikvehAuth.enabled();
     if (!authOn) { root.innerHTML = '<div class="note-box">מסך ההרשאות פעיל כשמוגדרת כניסה עם Google (GOOGLE_CLIENT_ID). בלי זה כל מי שנכנס יכול לדווח.</div>'; return; }

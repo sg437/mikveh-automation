@@ -243,6 +243,11 @@
   .form-link b{display:block;color:var(--brand);margin-bottom:3px}
   .form-link small{color:var(--muted)}
   .note-box{background:var(--brand-soft);border-radius:8px;padding:10px 12px;font-size:.86rem;margin-bottom:12px}
+  .note-box.conn{background:var(--warn-soft);border:1px solid #E9D9B0;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .note-box.conn a{font-weight:800}
+  .rform small.hint{font-size:.76rem}
+  .dl code{direction:ltr;unicode-bidi:embed;white-space:nowrap;font-size:.76rem;background:var(--gray-soft);border-radius:4px;padding:0 5px}
+  .dl dd small{color:var(--muted);font-weight:400}
   .menu{position:relative}
   .menu .dd{display:none;position:absolute;inset-inline-end:0;top:calc(100% + 4px);background:#fff;border:1px solid var(--line);border-radius:8px;box-shadow:0 6px 18px rgba(0,0,0,.12);min-width:230px;z-index:5;padding:4px}
   .menu.open .dd{display:block}
@@ -459,6 +464,8 @@
 </aside>
 
 <main>
+  <div class="note-box conn" id="connBanner" hidden></div>
+
   <!-- ===== דף הבית ===== -->
   <section class="view" id="view-home"></section>
 
@@ -560,7 +567,7 @@
   <section class="view" id="view-users"></section>
 
   <!-- ===== הגדרות והרשאות ===== -->
-  <section class="view" id="view-settings"></section>
+  <section class="view" id="view-settings"><div id="setupBox"></div><div id="permsBox"></div></section>
 
   <!-- ===== דיונים ===== -->
   <section class="view" id="view-talk"></section>
@@ -643,6 +650,7 @@
 <script src="work.js"></script>
 <script src="media.js"></script>
 <script src="edit.js"></script>
+<script src="setup.js"></script>
 <script src="perms.js"></script>
 <script src="contractor.js"></script>
 <script src="auth.js"></script>

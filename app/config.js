@@ -13,3 +13,13 @@ window.MIKVEH_CONFIG = {
   // אותו ערך צריך להיות גם ב-Script Property בשם GOOGLE_CLIENT_ID. ריק = מצב "מי אני" הישן.
   googleClientId: '',
 };
+
+/**
+ * אפשר גם לא לגעת בקובץ הזה: במסך "הגדרות והרשאות" יש "חיבור לגיליון" –
+ * מדביקים שם את הכתובת, והיא נשמרת במכשיר וגוברת על מה שכתוב כאן.
+ * (ההגדרה כאן נוחה כשרוצים שכל המשתמשים יקבלו את החיבור מוכן מראש.)
+ */
+try {
+  var _mkSaved = JSON.parse(localStorage.getItem('mikveh.connection') || 'null');
+  if (_mkSaved) Object.keys(_mkSaved).forEach(function (k) { if (_mkSaved[k]) window.MIKVEH_CONFIG[k] = _mkSaved[k]; });
+} catch (e) { /* אין localStorage – ממשיכים עם הערכים שבקובץ */ }

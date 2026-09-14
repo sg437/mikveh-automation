@@ -39,7 +39,7 @@
       const token = window.MikvehAuth ? MikvehAuth.token() : '';
       if (!this.url(action) || !navigator.onLine) {
         if (Outbox.CAN_QUEUE.indexOf(action) >= 0) return Promise.resolve(Outbox.add(action, data));
-        return Promise.reject(new Error(!this.url(action) ? 'הפעולה הזו דורשת חיבור לגיליון (עדיין לא הוגדר בקובץ config.js)' : 'אין חיבור לאינטרנט. נסה שוב כשיהיה חיבור.'));
+        return Promise.reject(new Error(!this.url(action) ? 'הפעולה הזו דורשת חיבור לגיליון. פתח "הגדרות והרשאות" ⇠ "חיבור לגיליון".' : 'אין חיבור לאינטרנט. נסה שוב כשיהיה חיבור.'));
       }
       return this.postRaw(action, data, token).catch((err) => {
         if (err.code === 'auth' && window.MikvehAuth) MikvehAuth.onAuthError();
@@ -49,7 +49,7 @@
     },
     postRaw: function (action, data, token) {
       const url = this.url(action);
-      if (!url) return Promise.reject(new Error('אין חיבור לגיליון – יש להגדיר apiUrl בקובץ config.js'));
+      if (!url) return Promise.reject(new Error('אין חיבור לגיליון. פתח "הגדרות והרשאות" ⇠ "חיבור לגיליון".'));
       if (!navigator.onLine) return Promise.reject(new Error('אין חיבור לאינטרנט'));
       return fetch(url, { method: 'POST', redirect: 'follow', cache: 'no-store', body: JSON.stringify({ action, user: getUser(), token: token || '', data }) })
         .then((r) => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
@@ -316,6 +316,7 @@
     } else if (view === 'users') {
       if (window.MikvehAuth) MikvehAuth.renderUsersView(); $('#view-users').classList.add('on');
     } else if (view === 'settings') {
+      if (window.MikvehSetup) MikvehSetup.render();
       if (window.MikvehPerms) MikvehPerms.render(); $('#view-settings').classList.add('on');
     } else {
       $('#view-list').classList.add('on');
@@ -814,7 +815,7 @@
     if (src === 'live') return '';
     if (src === 'cached') return '<div class="note-box">אין חיבור כרגע, מוצג העותק השמור האחרון מהגיליון.</div>';
     return '<div class="note-box">' + (src === 'static'
-      ? 'האפליקציה עובדת מעותק סטטי. דיווחי הוואטסאפ מגיעים רק בחיבור חי לגיליון (הגדרת apiUrl בקובץ config.js).'
+      ? 'האפליקציה עובדת מעותק לדוגמה. דיווחי הוואטסאפ מגיעים רק בחיבור חי לגיליון (מסך "הגדרות והרשאות").'
       : 'לא הצלחנו להתחבר לגיליון, מוצג העותק המקומי האחרון.') + '</div>';
   }
   function renderWhatsapp(list, m) {
@@ -1151,6 +1152,7 @@
     $('#btnReload').addEventListener('click', () => location.reload());
     $('#footer').textContent = (data.source === 'live' || data.source === 'cached' ? 'מקור הנתונים: ' + (data.meta.spreadsheet || 'הגיליון החי') : 'מקור הנתונים: עותק מקומי של הגיליון') +
       ' (' + data.mikvaot.length + ' מקוואות, ' + data.actions.length + ' פעולות, ' + data.inspections.length + ' דוחות פיקוח, ' + (data.whatsapp || []).length + ' דיווחי וואטסאפ). גרסת מערכת 0.2';
+    if (window.MikvehSetup) MikvehSetup.banner(data.source);
     window.MK = { S, $, esc, hebOf, fmtDate, parseISO, badge, tel, findByName, DataSource, route, buildIndexes: rebuild, addAction, getUser, requireUser, openUserModal, toast, openReport, closeReport, pickMikveh, exportTable, uniq, fillSelect, certRows, drainedRows };
     // מצב "אפליקציית דיונים" – פתיחה ישירה בדיונים, בלי שאר המסכים
     if (/[?&]app=talk/.test(location.search)) {
