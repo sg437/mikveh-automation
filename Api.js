@@ -88,15 +88,20 @@ function apiHandle_(e, action) {
         groups: apiGroups_(ss), reactions: apiReactions_(ss) });
     }
     if (action === 'data') {
-      const data = apiBuildData_();
-      // מי מחובר (אם נשלח טוקן סשן)
+      // הגוף הכבד מגיע מהמטמון; השדות שתלויים במשתמש נתפרים אליו בלי לפענח
+      // מחדש שני מגה-בייט של JSON.
+      const body = apiCachedDataJson_();
       const tok = (e.parameter && e.parameter.session) || '';
-      data.me = tok ? authSession_(apiSpreadsheet_(), tok) : null;
-      data.authEnabled = authEnabled_();
-      // ה-Client ID אינו סוד – הוא גלוי בכל דף שמציג כניסה עם Google. מסירת הערך
-      // כאן חוסכת הקלדה של 72 תווים בכל מכשיר, שהייתה מקור ל-invalid_client.
-      data.googleClientId = getProp_('GOOGLE_CLIENT_ID') || '';
-      return jsonResponse_(data);
+      const extra = {
+        me: tok ? authSession_(apiSpreadsheet_(), tok) : null,
+        authEnabled: authEnabled_(),
+        // ה-Client ID אינו סוד – הוא גלוי בכל דף שמציג כניסה עם Google. מסירת
+        // הערך כאן חוסכת הקלדה של 72 תווים בכל מכשיר, מקור ל-invalid_client.
+        googleClientId: getProp_('GOOGLE_CLIENT_ID') || ''
+      };
+      const tail = JSON.stringify(extra);
+      const merged = body.slice(0, body.lastIndexOf('}')) + ',' + tail.slice(1);
+      return ContentService.createTextOutput(merged).setMimeType(ContentService.MimeType.JSON);
     }
     return jsonResponse_({ error: 'unknown action: ' + action });
   } catch (err) {
@@ -135,6 +140,8 @@ function apiPing_() {
  * מראה כמה זמן לוקחת כל לשונית וכמה גדולה התשובה, כדי לדעת מה באמת מאט
  * את פתיחת האפליקציה במקום לנחש.
  */
+function pad_(v, n) { let t = String(v); while (t.length < n) t += ' '; return t; }
+
 function testApiSpeed() {
   const t0 = Date.now();
   const ss = apiSpreadsheet_();
@@ -166,17 +173,72 @@ function testApiSpeed() {
       size = json.length;
       n = Array.isArray(res) ? res.length : Object.keys(res || {}).length;
     } catch (err) {
-      Logger.log('%-18s שגיאה: %s', p[0], err.message);
+      Logger.log(pad_(p[0], 18) + 'שגיאה: ' + err.message);
       return;
     }
     const ms = Date.now() - t;
     total += ms; bytes += size;
-    Logger.log('%-18s %6s ms   %6s רשומות   %7s KB', p[0], ms, n, Math.round(size / 1024));
+    Logger.log(pad_(p[0], 18) + pad_(ms + ' ms', 10) + pad_(n + ' רשומות', 14) + Math.round(size / 1024) + ' KB');
   });
 
   Logger.log('—'.repeat(46));
   Logger.log('סך הכל: %s ms, גודל התשובה כ-%s KB', total, Math.round(bytes / 1024));
   Logger.log('כל רענון באפליקציה מבצע את כל זה מחדש.');
+}
+
+/**
+ * מטמון לתשובת ?action=data.
+ *
+ * בניית התשובה קוראת 13 לשוניות ונמשכת שניות רבות, ובלעדיו כל רענון של כל
+ * משתמש משלם את המחיר במלואו. כאן רק הטעינה הראשונה אחרי שינוי משלמת.
+ *
+ * CacheService מוגבל ל-100KB לערך, ולכן התשובה נשמרת בפיסות. הגודל נמדד
+ * בתווים ולא בבתים, ואות עברית תופסת שני בתים ב-UTF-8 – ומכאן פיסה של
+ * 40,000 תווים, שנשארת בבטחה מתחת למגבלה.
+ *
+ * שדות שתלויים במשתמש (me, authEnabled) אינם נכנסים למטמון; הם מתווספים
+ * לתשובה אחרי השליפה.
+ */
+const DATA_CACHE = { PREFIX: 'apiData:', CHUNK: 40000, TTL: 600 };
+
+function apiCachedDataJson_() {
+  const cache = CacheService.getScriptCache();
+  const count = cache.get(DATA_CACHE.PREFIX + 'n');
+  if (count) {
+    const n = Number(count);
+    const keys = [];
+    for (let i = 0; i < n; i++) keys.push(DATA_CACHE.PREFIX + i);
+    const got = cache.getAll(keys);
+    let out = '', whole = true;
+    for (let i = 0; i < n; i++) {
+      const part = got[DATA_CACHE.PREFIX + i];
+      if (part === null || part === undefined) { whole = false; break; } // פיסה פגה – בונים מחדש
+      out += part;
+    }
+    if (whole && out) return out;
+  }
+  const json = JSON.stringify(apiBuildData_());
+  try {
+    const map = {};
+    let n = 0;
+    for (let i = 0; i < json.length; i += DATA_CACHE.CHUNK) { map[DATA_CACHE.PREFIX + n] = json.slice(i, i + DATA_CACHE.CHUNK); n++; }
+    map[DATA_CACHE.PREFIX + 'n'] = String(n);
+    cache.putAll(map, DATA_CACHE.TTL);
+  } catch (err) {
+    Logger.log('שמירת המטמון נכשלה: ' + err); // לא קריטי – התשובה עדיין נכונה
+  }
+  return json;
+}
+
+/** מנקה את המטמון. נקרא אחרי כל כתיבה, כדי שהשינוי ייראה מיד. */
+function apiInvalidateData_() {
+  try {
+    const cache = CacheService.getScriptCache();
+    const count = cache.get(DATA_CACHE.PREFIX + 'n');
+    const keys = [DATA_CACHE.PREFIX + 'n'];
+    if (count) for (let i = 0; i < Number(count); i++) keys.push(DATA_CACHE.PREFIX + i);
+    cache.removeAll(keys);
+  } catch (err) { Logger.log('ניקוי המטמון נכשל: ' + err); }
 }
 
 /** גיליון המקוואות (לפי MIKVAOT_SHEET_ID). */

@@ -78,6 +78,7 @@ function recordWhatsappAction_(queueRow, result) {
     }
 
     sh.appendRow(row);
+    apiInvalidateData_(); // דיווח מהוואטסאפ נכנס לתיק – שהאפליקציה תראה אותו מיד
     const hebWhen = HebDate.format(when);
     if (action === 'חידוש תעודה') return 'נרשם בתיק: חידוש תעודה ' + hebWhen + ', תוקף עד ' + row[20] + ' ' + row[21];
     return 'נרשם בתיק: ' + action + (otzar ? ' ' + otzar : '') + ' ' + hebWhen;

@@ -65,7 +65,11 @@ function apiWritePost_(e, action) {
       if (!user.name) return jsonResponse_({ error: 'חסר שם משתמש (הגדרות ➜ המשתמש שלי)' });
     }
 
-    if (action === 'addMedia') return jsonResponse_(addMedia_(ss, data, user)); // בלי נעילה – העלאה איטית
+    if (action === 'addMedia') {
+      const res = addMedia_(ss, data, user); // בלי נעילה – העלאה איטית
+      apiInvalidateData_();
+      return jsonResponse_(res);
+    }
     if (['users', 'addUser', 'updateUser'].indexOf(action) >= 0) return jsonResponse_(authAdmin_(ss, action, data, user));
 
     const lock = LockService.getScriptLock();
@@ -85,6 +89,9 @@ function apiWritePost_(e, action) {
       if (action === 'saveContractor') return jsonResponse_(saveContractor_(ss, data, user));
       if (action === 'notifyContractor') return jsonResponse_(notifyContractor_(ss, data, user));
     } finally {
+      // כל כתיבה משנה את הנתונים, ולכן המטמון של ?action=data חייב להתבטל –
+      // אחרת המשתמש יראה את המסך הישן עד שהמטמון יפוג.
+      apiInvalidateData_();
       lock.releaseLock();
     }
     return jsonResponse_({ error: 'unknown action: ' + action });
