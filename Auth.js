@@ -196,6 +196,32 @@ function authAdmin_(ss, action, d, admin) {
   return { error: 'unknown admin action' };
 }
 
+/**
+ * בדיקת ההתראות בוואטסאפ – להרצה מעורך ה-Apps Script (Run ▶).
+ *
+ * כל ההתראות במערכת מחריגות את מי שביצע את הפעולה, ולכן אי אפשר לבדוק אותן
+ * על עצמך דרך המסך. הפונקציה הזו שולחת הודעת בדיקה לכל משתמש פעיל שיש לו
+ * טלפון – כולל אתה – ומדפיסה ליומן הביצוע בדיוק מה חסר אם דבר לא נשלח.
+ */
+function testWhatsappNotify() {
+  const ss = apiSpreadsheet_();
+  const on = getProp_('NOTIFY_WHATSAPP');
+  const green = !!(getProp_('GREEN_ID_INSTANCE') && getProp_('GREEN_API_TOKEN'));
+  Logger.log('NOTIFY_WHATSAPP = "%s"   (חייב להיות בדיוק "1", בלי רווחים)', String(on));
+  Logger.log('חיבור Green API: %s', green ? 'קיים' : 'חסר');
+
+  const users = authUsers_(ss).filter(function (u) { return u.active && u.phone; });
+  Logger.log('משתמשים פעילים עם טלפון: %s', users.length);
+  users.forEach(function (u) { Logger.log('   %s | %s ➜ %s', u.name, u.phone, phoneToChatId_(u.phone)); });
+
+  if (String(on) !== '1') { Logger.log('❌ ההתראות כבויות. תקן את NOTIFY_WHATSAPP ל-1 והרץ שוב.'); return; }
+  if (!green) { Logger.log('❌ חסרים GREEN_ID_INSTANCE / GREEN_API_TOKEN.'); return; }
+  if (!users.length) { Logger.log('❌ אין אף משתמש פעיל עם טלפון. הגדר טלפון במסך "משתמשים".'); return; }
+
+  notifyUsers_(users, '🔔 הודעת בדיקה ממערכת כשרות המקוואות.\nאם קיבלת אותה – ההתראות האישיות עובדות.');
+  Logger.log('✅ נשלחה בקשת שליחה ל-%s מספרים. בדוק בוואטסאפ.', users.length);
+}
+
 /** מוחק מהמטמון את כל הסשנים של משתמש (אחרי שינוי תפקיד או השבתה). */
 function authInvalidateUser_(ss, userId) {
   const sh = ss.getSheetByName(AUTH.SESSIONS_SHEET);
