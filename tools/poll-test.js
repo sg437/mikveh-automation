@@ -156,6 +156,18 @@ box.workPollSummary();
 check('נשלח סיכום מסכם', box.sent.length === 1 && /הכל חולק/.test(box.sent[0].body.message));
 check('הסקר נסגר', rows(box, 'סקרי עבודה')[1][9] === 'הסתיים');
 
+console.log('\n— סקר שהמשימות שלו נמחקו מהגיליון —');
+box = setup();
+run(box, 'addWorkItems_', box.__ss, { items: MIKVAOT.slice(0, 2).map((m) => ({ mikveh: m, type: 'cert' })) }, USER);
+rows(box, 'שיבוצים').length = 1; // נשארת רק שורת הכותרת
+rows(box, 'סקרי עבודה')[1][7] = new Date(Date.now() - 10 * 60000);
+box.sent.length = 0;
+box.workPollSummary();
+check('לא נשלח סיכום ריק לקבוצה', box.sent.length === 0);
+check('הסקר נסגר', rows(box, 'סקרי עבודה')[1][9] === 'הסתיים');
+check('נרשם ביומן הסקרים', rows(box, 'יומן סקרים').some((r) => /נמחקו אחרי שהסקר נשלח/.test(String(r[6]))));
+check('ולא בלשונית "שגיאות" (שמזעיקה התראה לטלפון)', !box.__ss.getSheetByName('שגיאות'));
+
 console.log('\n— מגבלת 12 האפשרויות של וואטסאפ —');
 box = setup();
 const many = [];

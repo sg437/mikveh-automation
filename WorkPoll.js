@@ -78,7 +78,7 @@ function workPollParse_(v) {
  * יומן ההצבעות — כדי שיהיה אפשר לראות מה הגיע מהוואטסאפ ומה נרשם.
  * בלעדיו הצבעה שלא נקלטה (הגדרות Green API, סקר שאינו של המערכת) נעלמת בשקט.
  */
-function workPollLog_(ss, data, pollTitle, applied, note) {
+function workPollLog_(ss, data, pollId, pollTitle, applied, note) {
   try {
     if (!ss) return;
     let sh = ss.getSheetByName(WORK_POLL.LOG_SHEET);
@@ -88,11 +88,10 @@ function workPollLog_(ss, data, pollTitle, applied, note) {
       sh.setFrozenRows(1);
       sh.setRightToLeft(true);
     }
-    const sd = data.senderData || {};
-    const pd = (data.messageData || {}).pollMessageData || {};
-    sh.appendRow([new Date(), String(data.typeWebhook || ''),
-      String(sd.senderName || sd.senderContactName || '') + ' ' + chatIdToPhone_(sd.sender),
-      String(pd.stanzaId || ''), pollTitle || '', applied || '', note || '']);
+    const sd = (data && data.senderData) || {};
+    sh.appendRow([new Date(), data ? String(data.typeWebhook || '') : 'המערכת',
+      data ? String(sd.senderName || sd.senderContactName || '') + ' ' + chatIdToPhone_(sd.sender) : '',
+      String(pollId || ''), pollTitle || '', applied || '', note || '']);
     // גיזום: היומן הוא כלי אבחון, לא ארכיון
     const extra = sh.getLastRow() - 1 - WORK_POLL.LOG_MAX;
     if (extra > 0) sh.deleteRows(2, extra);
@@ -207,7 +206,7 @@ function handlePollUpdate_(data) {
       if (String(values[i][0]).toUpperCase() === pollId.toUpperCase()) { rowNum = i + 2; row = values[i]; break; }
     }
     if (rowNum < 0) {
-      workPollLog_(ss, data, '', '', 'סקר שאינו של המערכת (או שנמחק מהלשונית)');
+      workPollLog_(ss, data, pollId, '', '', 'סקר שאינו של המערכת (או שנמחק מהלשונית)');
       return { status: 'ignored', reason: 'poll: סקר שאינו של המערכת' };
     }
 
@@ -274,7 +273,7 @@ function handlePollUpdate_(data) {
     const note = [];
     if (blocked) note.push(blocked + ' סימונים על משימות שכבר נלקחו');
     if (missing) note.push(missing + ' סימונים על משימות שאינן בלשונית "' + WRITE.WORK_SHEET + '" (נמחקו?)');
-    workPollLog_(ss, data, String(row[3] || ''),
+    workPollLog_(ss, data, pollId, String(row[3] || ''),
       applied ? 'נרשמו ' + applied + ' שינויים' : 'אין שינוי', note.join(' · '));
     return { status: 'poll', idMessage: data.idMessage || '', applied: applied, blocked: blocked, missing: missing };
   } catch (err) {
@@ -344,8 +343,10 @@ function workPollSummary(force) {
       else open.push('• ' + rec.mikveh);
     });
     if (!taken.length && !open.length) {
-      // המשימות של הסקר לא נמצאו בלשונית "שיבוצים" (נמחקו?) — נסגר, אבל לא בשקט
-      logError_('workPollSummary', new Error('לא נמצאו משימות לסקר ' + String(row[0]) + ' — הסקר נסגר'), String(row[3] || ''));
+      // המשימות של הסקר נמחקו מלשונית "שיבוצים" אחרי שהוא נשלח. הסקר נסגר —
+      // ונרשם ביומן הסקרים ולא בלשונית "שגיאות", שמזעיקה התראה לטלפון על כל שורה.
+      workPollLog_(ss, null, String(row[0]), String(row[3] || ''), 'הסקר נסגר',
+        'המשימות של הסקר אינן בלשונית "' + WRITE.WORK_SHEET + '" — נמחקו אחרי שהסקר נשלח');
       sh.getRange(i + 2, 10).setValue(WORK_POLL.CLOSED);
       return;
     }
