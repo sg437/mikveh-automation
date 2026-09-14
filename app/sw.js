@@ -1,6 +1,7 @@
 /* Service worker: מטמון של קבצי האפליקציה לעבודה לא מקוונת. להעלות גרסה בכל שינוי. */
-const CACHE = 'mikveh-app-v12';
-const FILES = ['./', './index.html', './app.js', './forms.js', './talk.js', './work.js', './media.js', './edit.js', './setup.js', './perms.js', './contractor.js', './auth.js', './config.js', './hebdate.js', './data.js', './manifest.json'];
+const CACHE = 'mikveh-app-v13';
+const FILES = ['./', './index.html', './app.js', './forms.js', './talk.js', './work.js', './media.js', './edit.js', './setup.js', './perms.js', './contractor.js', './auth.js', './config.js', './hebdate.js', './data.js', './manifest.json',
+  './privacy.html', './terms.html', './legal.css'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(FILES)).then(() => self.skipWaiting()));
