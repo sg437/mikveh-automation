@@ -19,6 +19,9 @@
     const K = MK(), m = mk(w.mikvehId), me = K.getUser().name;
     const t = TYPES[w.type] || TYPES.other;
     const mine = w.status === 'taken' && w.takenBy === me;
+    const isAdmin = (K.getUser().role || '') === 'מנהל';
+    // מחיקה: למי שפתח, או למנהל. אם מישהו אחר כבר לקח – למנהל בלבד.
+    const canDelete = isAdmin || (w.by === me && !(w.takenBy && w.takenBy !== me));
     return '<div class="wcard ' + esc(w.status) + '" data-id="' + esc(w.id) + '">' +
       '<h4>' + t.icon + ' <a href="#/m/' + encodeURIComponent(w.mikvehId) + '">' + esc(m.name) + '</a></h4>' +
       '<div class="wl">' + esc(t.label) + (w.note ? ' · ' + esc(w.note) : '') + '</div>' +
@@ -29,6 +32,7 @@
         (w.status === 'open' ? '<button class="btn primary small" data-act="take">אני לוקח</button>' : '') +
         (w.status === 'taken' ? '<button class="btn small" data-act="report">דווח ביצוע</button>' + (mine ? '<button class="btn small" data-act="release">שחרר</button>' : '') : '') +
         (w.status !== 'done' ? '<button class="btn small" data-act="done">סמן בוצע</button>' : '') +
+        (canDelete ? '<button class="btn small danger" data-act="delete" title="מחיקת המשימה מהרשימה">מחק</button>' : '') +
       '</div></div>';
   }
 
@@ -46,6 +50,21 @@
         if (!m) return;
         window.MikvehWork.pending = w.id;
         K.openReport(m, t.form);
+        return;
+      }
+      if (act === 'delete') {
+        const name = mk(w.mikvehId).name;
+        const extra = w.takenBy && w.takenBy !== K.getUser().name ? '\n' + w.takenBy + ' כבר לקח/ה אותה.' : '';
+        if (!window.confirm('למחוק את המשימה "' + name + '"?' + extra + '\nהמחיקה סופית.')) return;
+        b.disabled = true;
+        K.DataSource.post('deleteWorkItem', { id: w.id }).then(() => {
+          const arr = K.S.data.work || [];
+          const i = arr.findIndex((x) => x.id === w.id);
+          if (i >= 0) arr.splice(i, 1);
+          refreshNav();
+          K.toast('המשימה נמחקה');
+          rerender();
+        }).catch((err) => { b.disabled = false; K.toast('לא נמחק: ' + err.message); });
         return;
       }
       const status = act === 'take' ? 'taken' : act === 'release' ? 'open' : 'done';
@@ -72,7 +91,9 @@
       (res.records || []).forEach((r) => { if (!all().some((w) => w.id === r.id)) K.S.data.work.push(r); });
       if (res.message) K.S.data.messages.push(res.message);
       refreshNav();
-      K.toast((res.records || []).length + ' משימות נפתחו לחלוקה. נשלחה הודעה לדיון הכללי.');
+      const n = (res.records || []).length, skipped = (res.skipped || []).length;
+      K.toast(!n && skipped ? (skipped === 1 ? 'המשימה כבר פתוחה ברשימה' : 'כל ' + skipped + ' המשימות כבר פתוחות ברשימה')
+        : n + ' משימות נפתחו לחלוקה' + (skipped ? ' · ' + skipped + ' כבר היו פתוחות' : '') + '. נשלחה הודעה לדיון הכללי.');
       location.hash = '#/work';
     });
   }

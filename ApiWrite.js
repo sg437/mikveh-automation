@@ -76,6 +76,7 @@ function apiWritePost_(e, action) {
       if (action === 'addMessage') return jsonResponse_(writeMessage_(ss, data, user));
       if (action === 'addWorkItems') return jsonResponse_(addWorkItems_(ss, data, user));
       if (action === 'updateWorkItem') return jsonResponse_(updateWorkItem_(ss, data, user));
+      if (action === 'deleteWorkItem') return jsonResponse_(deleteWorkItem_(ss, data, user));
       if (action === 'updateMikveh') return jsonResponse_(updateMikveh_(ss, data, user));
       if (action === 'addMikveh') return jsonResponse_(addMikveh_(ss, data, user));
       if (action === 'addGroup') return jsonResponse_(addGroup_(ss, data, user));
@@ -278,17 +279,31 @@ function addWorkItems_(ss, d, user) {
   if (!items.length) return { error: 'לא נבחרו מקוואות' };
   const sh = workSheet_(ss);
   const now = new Date();
-  const records = [], names = [];
+  const records = [], names = [], skipped = [];
+  // משימות שכבר פתוחות או נלקחו – כדי שלחיצה כפולה לא תיצור כפילות
+  const openKeys = {};
+  const lastRow = sh.getLastRow();
+  if (lastRow > 1) {
+    sh.getRange(2, 1, lastRow - 1, WRITE.WORK_HEADERS.length).getValues().forEach(function (v) {
+      if (apiClean_(v[4]) !== 'done') openKeys[apiNorm_(v[3]) + '|' + apiClean_(v[2])] = true;
+    });
+  }
   items.forEach(function (it) {
     const mikveh = canonicalMikveh_(ss, it.mikveh);
     if (!mikveh) return;
     const type = WORK_TYPES[it.type] ? it.type : 'other';
+    const key = apiNorm_(mikveh) + '|' + type;
+    if (openKeys[key]) { skipped.push(mikveh); return; }
+    openKeys[key] = true;
     const id = Utilities.getUuid();
     sh.appendRow([id, now, type, mikveh, 'open', '', '', '', '', txt_(it.note, 200), user.name]);
     records.push({ id: id, ts: apiIsoDate_(now), type: type, mikveh: mikveh, mikvehId: apiNorm_(mikveh), status: 'open', note: txt_(it.note, 200) || null, by: user.name });
     names.push(mikveh);
   });
-  if (!records.length) return { error: 'אף מקווה לא נמצא בבסיס הנתונים' };
+  if (!records.length) {
+    if (skipped.length) return { ok: true, records: [], skipped: skipped };
+    return { error: 'אף מקווה לא נמצא בבסיס הנתונים' };
+  }
   const typeLabel = WORK_TYPES[records[0].type];
   const text = '📋 ' + user.name + ' פתח/ה ' + records.length + ' משימות לחלוקה (' + typeLabel + '): ' + names.join(', ') + '.\nלבחירה: מסך "חלוקת עבודה" ➜ "אני לוקח".';
   const msg = writeMessage_(ss, { mikveh: '', text: text, _system: true }, { name: user.name, phone: user.phone });
@@ -296,7 +311,37 @@ function addWorkItems_(ss, d, user) {
   // התראה למפקחים ולמנהלים (חוץ מהפותח)
   notifyUsers_(authUsers_(ss).filter(function (u) { return u.active && u.phone && (u.role === 'מפקח' || u.role === 'מנהל') && u.name !== user.name; }),
     '📋 ' + user.name + ' פתח/ה ' + records.length + ' משימות לחלוקה (' + typeLabel + '): ' + names.slice(0, 15).join(', ') + (names.length > 15 ? ' ועוד' : '') + '\n\nלבחירה: מערכת המקוואות ➜ חלוקת עבודה ➜ "אני לוקח"');
-  return { ok: true, records: records, message: msg.record || null };
+  return { ok: true, records: records, message: msg.record || null, skipped: skipped };
+}
+
+/**
+ * מחיקת משימה שנפתחה בטעות. מוחקת את השורה לגמרי.
+ * מותר למי שפתח אותה, ולמנהל. אם מישהו אחר כבר לקח אותה – למנהל בלבד.
+ */
+function deleteWorkItem_(ss, d, user) {
+  const sh = workSheet_(ss);
+  const last = sh.getLastRow();
+  if (last < 2) return { error: 'המשימה לא נמצאה' };
+  const values = sh.getRange(2, 1, last - 1, WRITE.WORK_HEADERS.length).getValues();
+  let rowNum = -1, row = null;
+  for (let i = 0; i < values.length; i++) {
+    if (String(values[i][0]) === String(d.id)) { rowNum = i + 2; row = values[i]; break; }
+  }
+  if (rowNum < 0) return { error: 'המשימה לא נמצאה' };
+  const rec = workRecord_(row);
+  const isAdmin = user.role === 'מנהל';
+  const takenByOther = rec.takenBy && rec.takenBy !== user.name;
+  if (!isAdmin) {
+    if (rec.by !== user.name) return { error: 'רק מי שפתח את המשימה, או מנהל, יכול למחוק אותה' };
+    if (takenByOther) return { error: rec.takenBy + ' כבר לקח/ה את המשימה. בקש/י ממנה/ו לשחרר, או שמנהל ימחק' };
+  }
+  sh.deleteRow(rowNum);
+  // מי שהמשימה נלקחה על ידו צריך לדעת שהיא נעלמה
+  if (takenByOther) {
+    notifyUsers_(authUsers_(ss).filter(function (u) { return u.active && u.phone && u.name === rec.takenBy; }),
+      '🗑️ ' + user.name + ' מחק/ה משימה שלקחת: ' + rec.mikveh + ' (' + (WORK_TYPES[rec.type] || '') + ')');
+  }
+  return { ok: true, id: rec.id };
 }
 
 /** עדכון סטטוס: taken (המשתמש לוקח), open (שחרור), done (בוצע). */
