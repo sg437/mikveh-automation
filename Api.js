@@ -294,16 +294,27 @@ function apiBuildData_() {
 
 // ==================== קריאת הגיליונות ====================
 
-function apiRows_(ss, name) {
+/**
+ * קריאת לשונית.
+ *
+ * maxCols מגביל את רוחב הקריאה למספר העמודות שהקוד באמת משתמש בהן.
+ * getLastColumn מחזיר את העמודה האחרונה שיש בה תוכן כלשהו בכל הלשונית –
+ * גם תא בודד או עיצוב רחוק מימין מנפח כל שורה בעשרות תאים ריקים. בלשונית
+ * הפעולות, 4,080 שורות כאלה עלו בשש שניות לכל טעינה.
+ */
+function apiRows_(ss, name, maxCols) {
   const sh = ss.getSheetByName(name);
   if (!sh) throw new Error('הלשונית "' + name + '" לא נמצאה בגיליון המקוואות');
-  const lastRow = sh.getLastRow(), lastCol = sh.getLastColumn();
+  const lastRow = sh.getLastRow();
   if (lastRow < 1) return [];
-  return sh.getRange(1, 1, lastRow, lastCol).getValues();
+  let cols = sh.getLastColumn();
+  if (maxCols && maxCols < cols) cols = maxCols;
+  if (cols < 1) return [];
+  return sh.getRange(1, 1, lastRow, cols).getValues();
 }
 
 function apiMikvaot_(ss) {
-  const rows = apiRows_(ss, API.SHEETS.master);
+  const rows = apiRows_(ss, API.SHEETS.master, 51); // API_MASTER_FIELDS מגיע עד עמודה 49
   const out = [], seen = {};
   for (let i = 1; i < rows.length; i++) {
     const r = rows[i];
@@ -325,7 +336,7 @@ function apiMikvaot_(ss) {
 }
 
 function apiActions_(ss) {
-  const rows = apiRows_(ss, API.SHEETS.actions);
+  const rows = apiRows_(ss, API.SHEETS.actions, 22); // כמו WRITE.ACTION_COLS
   const out = [];
   for (let i = 1; i < rows.length; i++) {
     const r = rows[i];
@@ -355,7 +366,7 @@ function apiActions_(ss) {
  * full=true (ב-?action=inspections&mikveh=...): עם המדורים, למקווה אחד.
  */
 function apiInspections_(ss, full) {
-  const rows = apiRows_(ss, API.SHEETS.inspections);
+  const rows = apiRows_(ss, API.SHEETS.inspections, 101); // הקוד קורא עד r[100]
   const hdr = rows[0].map(function (h) { return (apiClean_(h) || '').trim(); });
   const out = [];
   for (let i = 1; i < rows.length; i++) {
@@ -385,7 +396,7 @@ function apiInspections_(ss, full) {
 }
 
 function apiTasks_(ss) {
-  const rows = apiRows_(ss, API.SHEETS.tasks);
+  const rows = apiRows_(ss, API.SHEETS.tasks, 21); // הקוד קורא עד r[20]
   const out = [];
   for (let i = 2; i < rows.length; i++) {
     const r = rows[i];

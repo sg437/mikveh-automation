@@ -37,6 +37,9 @@ const WRITE = {
   MAX_TEXT: 4000,
 };
 
+/** פעולות שמשנות את הנתונים שנשמרים במטמון של ?action=data. */
+const HEAVY_WRITES = ['addAction', 'addInspection', 'addMikveh', 'updateMikveh'];
+
 function apiWritePost_(e, action) {
   try {
     const token = getProp_(API.TOKEN_PROP);
@@ -65,11 +68,7 @@ function apiWritePost_(e, action) {
       if (!user.name) return jsonResponse_({ error: 'חסר שם משתמש (הגדרות ➜ המשתמש שלי)' });
     }
 
-    if (action === 'addMedia') {
-      const res = addMedia_(ss, data, user); // בלי נעילה – העלאה איטית
-      apiInvalidateData_();
-      return jsonResponse_(res);
-    }
+    if (action === 'addMedia') return jsonResponse_(addMedia_(ss, data, user)); // בלי נעילה – העלאה איטית
     if (['users', 'addUser', 'updateUser'].indexOf(action) >= 0) return jsonResponse_(authAdmin_(ss, action, data, user));
 
     const lock = LockService.getScriptLock();
@@ -89,9 +88,10 @@ function apiWritePost_(e, action) {
       if (action === 'saveContractor') return jsonResponse_(saveContractor_(ss, data, user));
       if (action === 'notifyContractor') return jsonResponse_(notifyContractor_(ss, data, user));
     } finally {
-      // כל כתיבה משנה את הנתונים, ולכן המטמון של ?action=data חייב להתבטל –
-      // אחרת המשתמש יראה את המסך הישן עד שהמטמון יפוג.
-      apiInvalidateData_();
+      // רק כתיבות שמשנות את הגוף הכבד של ?action=data משליכות את המטמון.
+      // הודעות, שיבוצים, מדיה ותגובות מגיעים ממילא ב-?action=sync כל 40 שניות,
+      // ואילו השלכת המטמון בגללם הייתה מחזירה כל משתמש לבנייה מלאה.
+      if (HEAVY_WRITES.indexOf(action) >= 0) apiInvalidateData_();
       lock.releaseLock();
     }
     return jsonResponse_({ error: 'unknown action: ' + action });
