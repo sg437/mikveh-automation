@@ -26,6 +26,7 @@ const AUTH = {
   SESSIONS_HEADERS: ['טוקן', 'מזהה משתמש', 'שם', 'תפקיד', 'נוצר', 'תוקף'],
   SESSION_DAYS: 90,
   ROLES: ['מנהל', 'מפקח', 'בלנית', 'צופה'],
+  OPEN_SIGNUP_PROP: 'OPEN_SIGNUP',
   CACHE_SEC: 600,
   PERMS_SHEET: 'הרשאות',
   CLIENT_ID_PROP: 'GOOGLE_CLIENT_ID',
@@ -94,11 +95,21 @@ function authLogin_(ss, d) {
   let u = users.filter(function (x) { return x.googleId === g.sub || (x.email && x.email === g.email); })[0];
   const sh = authSheet_(ss, AUTH.USERS_SHEET, AUTH.USERS_HEADERS);
   if (!u) {
-    // משתמש חדש: הראשון = מנהל, השאר לפי DEFAULT_ROLE
-    const role = users.length ? (AUTH.ROLES.indexOf(getProp_(AUTH.DEFAULT_ROLE_PROP)) >= 0 ? getProp_(AUTH.DEFAULT_ROLE_PROP) : 'מפקח') : 'מנהל';
-    u = { id: Utilities.getUuid(), name: g.name, email: g.email, phone: '', role: role, active: true, googleId: g.sub, picture: g.picture };
-    sh.appendRow([u.id, u.name, u.email, '', u.role, 'כן', new Date(), new Date(), u.googleId, u.picture]);
-  } else {
+    // המשתמש הראשון במערכת הוא המנהל – כך אפשר להיכנס בפעם הראשונה.
+    if (!users.length) {
+      u = { id: Utilities.getUuid(), name: g.name, email: g.email, phone: '', role: 'מנהל', active: true, googleId: g.sub, picture: g.picture };
+      sh.appendRow([u.id, u.name, u.email, '', u.role, 'כן', new Date(), new Date(), u.googleId, u.picture]);
+    } else if (getProp_(AUTH.OPEN_SIGNUP_PROP) !== '1') {
+      // ברירת המחדל: רישום סגור. רק מי שמנהל הוסיף מראש ב"ניהול משתמשים" נכנס.
+      return { error: 'אין לך הרשאה להיכנס למערכת. פנה למנהל כדי שיוסיף את הכתובת ' + g.email + '.' };
+    } else {
+      // רישום פתוח (OPEN_SIGNUP=1): כל חשבון Google נרשם לבד עם DEFAULT_ROLE.
+      const role = AUTH.ROLES.indexOf(getProp_(AUTH.DEFAULT_ROLE_PROP)) >= 0 ? getProp_(AUTH.DEFAULT_ROLE_PROP) : 'מפקח';
+      u = { id: Utilities.getUuid(), name: g.name, email: g.email, phone: '', role: role, active: true, googleId: g.sub, picture: g.picture };
+      sh.appendRow([u.id, u.name, u.email, '', u.role, 'כן', new Date(), new Date(), u.googleId, u.picture]);
+    }
+  }
+  if (u.rowNum) {
     if (!u.active) return { error: 'המשתמש אינו פעיל. פנה למנהל.' };
     sh.getRange(u.rowNum, 8).setValue(new Date());
     if (!u.googleId) sh.getRange(u.rowNum, 9).setValue(g.sub);

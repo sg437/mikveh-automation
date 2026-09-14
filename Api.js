@@ -102,6 +102,7 @@ function apiPing_() {
     googleClientId: !!getProp_('GOOGLE_CLIENT_ID'),
     archiveFolder: !!getProp_('MIKVEH_ARCHIVE_FOLDER_ID'),
     waAutoActions: getProp_('WA_AUTO_ACTIONS') === '1',
+    openSignup: getProp_('OPEN_SIGNUP') === '1',
     notifyWhatsapp: getProp_('NOTIFY_WHATSAPP') === '1',
     greenApi: !!(getProp_('GREEN_ID_INSTANCE') && getProp_('GREEN_API_TOKEN')),
     alertChat: !!getProp_('ALERT_CHAT_ID'),
