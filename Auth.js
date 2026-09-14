@@ -270,6 +270,7 @@ const PERM_ACTIONS = [
   { key: 'addProject', label: 'פתיחת פרויקט בנייה / שיפוץ', def: { 'מפקח': 1 } },
   { key: 'updateProject', label: 'עריכת פרטי פרויקט', def: { 'מפקח': 1 } },
   { key: 'updateProjectStage', label: 'אישור שלב בצ\'ק-ליסט הבנייה', def: { 'מפקח': 1 } },
+  { key: 'completeProject', label: 'אישור סיום פרויקט והכנסת המקווה לשירות', def: { 'מפקח': 1 } },
 ];
 const PERM_ROLES = ['מפקח', 'קבלן', 'צופה']; // מנהל תמיד הכל
 
@@ -291,6 +292,15 @@ function permsSheet_(ss) {
   head.forEach(function (v, i) {
     const fixed = authRole_(v);
     if (fixed && fixed !== String(v).trim()) sh.getRange(1, 3 + i).setValue(fixed);
+  });
+  // פעולה חדשה בקוד מקבלת שורה משלה. בלעדיה היא מוצגת בטבלה לפי ברירת המחדל
+  // אך authSetPerms_ – שעובר על שורות הגיליון – לא היה מוצא אותה לעדכון.
+  const last = sh.getLastRow();
+  const have = {};
+  if (last > 1) sh.getRange(2, 1, last - 1, 1).getValues().forEach(function (v) { have[String(v[0])] = true; });
+  PERM_ACTIONS.forEach(function (a) {
+    if (have[a.key]) return;
+    sh.appendRow([a.key, a.label].concat(PERM_ROLES.map(function (r) { return a.def[r] ? 'כן' : 'לא'; })));
   });
   return sh;
 }

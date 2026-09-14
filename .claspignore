@@ -3,3 +3,5 @@
 !*.js
 !*.gs
 !appsscript.json
+# בדיקות הצד השרתי (tools/) רצות ב-node ואינן חלק מפרויקט הסקריפט
+tools/**
