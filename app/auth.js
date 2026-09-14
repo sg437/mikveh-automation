@@ -99,7 +99,7 @@
     if (!enabled()) { root.innerHTML = '<div class="note-box">ניהול משתמשים פעיל רק כשמוגדרת כניסה עם Google (GOOGLE_CLIENT_ID).</div>'; return; }
     if (!u || u.role !== 'מנהל') { root.innerHTML = '<div class="empty">מסך זה למנהלים בלבד.</div>'; return; }
     root.innerHTML = '<div class="toolbar"><div class="row"><div class="field grow"><label>הוספת משתמש מראש (יקבל את התפקיד כשייכנס עם Google)</label><div class="um-row"><input id="nuEmail" type="email" placeholder="אימייל (Gmail)"><input id="nuName" type="text" placeholder="שם"><input id="nuPhone" type="tel" placeholder="טלפון"><select id="nuRole">' + ROLES.map((r) => '<option' + (r === 'מפקח' ? ' selected' : '') + '>' + r + '</option>').join('') + '</select><button class="btn primary" id="nuAdd" type="button">הוספה</button></div></div></div>' +
-      '<div class="summary">משתמש חדש שנכנס עם Google בלי הוספה מראש מקבל תפקיד "מפקח" (ניתן לשינוי ב-Script Property בשם DEFAULT_ROLE).</div></div><div class="tbl-wrap"><table id="usersTable"><thead><tr><th></th><th>שם</th><th>אימייל</th><th>טלפון</th><th>תפקיד</th><th>פעיל</th><th>כניסה אחרונה</th></tr></thead><tbody><tr><td colspan="7" class="empty">טוען...</td></tr></tbody></table></div>';
+      '<div class="summary">רק מי שנוסף כאן יכול להיכנס. מי שייכנס עם Google בלי שהוסף מראש יקבל "אין לך הרשאה להיכנס למערכת" ולא יירשם כלל. הטלפון משמש להתראות אישיות בוואטסאפ, וניתן לעריכה גם כאן וגם על ידי המשתמש עצמו בתפריט שלו.</div></div><div class="tbl-wrap"><table id="usersTable"><thead><tr><th></th><th>שם</th><th>אימייל</th><th>טלפון</th><th>תפקיד</th><th>פעיל</th><th>כניסה אחרונה</th></tr></thead><tbody><tr><td colspan="7" class="empty">טוען...</td></tr></tbody></table></div>';
     K.$('#nuAdd').addEventListener('click', () => {
       K.DataSource.post('addUser', { email: K.$('#nuEmail').value, name: K.$('#nuName').value, phone: K.$('#nuPhone').value, role: K.$('#nuRole').value })
         .then(() => { K.toast('המשתמש נוסף'); loadUsers(); }).catch((err) => K.toast('לא נוסף: ' + err.message));
@@ -108,12 +108,14 @@
     function loadUsers() {
       K.DataSource.post('users', {}).then((res) => {
         const tb = root.querySelector('#usersTable tbody');
-        tb.innerHTML = (res.users || []).map((x) => '<tr data-id="' + esc(x.id) + '"><td>' + (x.picture ? '<img class="avatar" src="' + esc(x.picture) + '" alt="" referrerpolicy="no-referrer">' : '👤') + '</td><td>' + esc(x.name) + '</td><td>' + esc(x.email || '') + '</td><td>' + esc(x.phone || '') + '</td>' +
+        tb.innerHTML = (res.users || []).map((x) => '<tr data-id="' + esc(x.id) + '"><td>' + (x.picture ? '<img class="avatar" src="' + esc(x.picture) + '" alt="" referrerpolicy="no-referrer">' : '👤') + '</td><td>' + esc(x.name) + '</td><td>' + esc(x.email || '') + '</td>' +
+          '<td><input class="cell-input" type="tel" data-f="phone" value="' + esc(x.phone || '') + '" placeholder="05x-xxxxxxx"></td>' +
           '<td><select data-f="role">' + ROLES.map((r) => '<option' + (r === x.role ? ' selected' : '') + '>' + r + '</option>').join('') + '</select></td>' +
           '<td><label class="pill chk"><input type="checkbox" data-f="active"' + (x.active ? ' checked' : '') + '><span>' + (x.active ? 'פעיל' : 'מושבת') + '</span></label></td><td>' + esc(x.lastLogin ? K.hebOf(x.lastLogin) + ' ' + K.fmtDate(x.lastLogin) : '') + '</td></tr>').join('') || '<tr><td colspan="7" class="empty">אין משתמשים</td></tr>';
         tb.querySelectorAll('[data-f]').forEach((el) => el.addEventListener('change', () => {
           const id = el.closest('tr').dataset.id;
-          const patch = el.dataset.f === 'role' ? { role: el.value } : { active: el.checked };
+          const f = el.dataset.f;
+          const patch = f === 'role' ? { role: el.value } : f === 'phone' ? { phone: el.value.trim() } : { active: el.checked };
           K.DataSource.post('updateUser', Object.assign({ id }, patch)).then(() => { K.toast('עודכן'); loadUsers(); }).catch((err) => { K.toast('לא עודכן: ' + err.message); loadUsers(); });
         }));
       }).catch((err) => { root.querySelector('#usersTable tbody').innerHTML = '<tr><td colspan="7" class="empty">' + esc(err.message) + '</td></tr>'; });
