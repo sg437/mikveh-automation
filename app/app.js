@@ -22,13 +22,25 @@
     load: function () {
       let url = this.url('data');
       if (url && window.MikvehAuth) { try { const t = MikvehAuth.token(); if (t) url += '&session=' + encodeURIComponent(t); } catch (e) { /* ignore */ } }
-      const fallback = (err) => {
-        const d = Object.assign({}, window.MIKVEH_DATA || { mikvaot: [], actions: [], inspections: [], tasks: [], plugs: {}, meta: {} });
+      // העותק המקומי (data.js) שוקל כמה מגה־בייט ומשמש רק כגיבוי. הוא נטען
+      // לפי דרישה, כדי שפתיחת האפליקציה בטלפון לא תמתין לו לפני שמשהו מוצג.
+      const localCopy = () => {
+        if (window.MIKVEH_DATA) return Promise.resolve(window.MIKVEH_DATA);
+        return new Promise((resolve) => {
+          const sc = document.createElement('script');
+          sc.src = 'data.js';
+          sc.onload = () => resolve(window.MIKVEH_DATA || null);
+          sc.onerror = () => resolve(null);
+          document.head.appendChild(sc);
+        });
+      };
+      const fallback = (err) => localCopy().then((local) => {
+        const d = Object.assign({}, local || { mikvaot: [], actions: [], inspections: [], tasks: [], plugs: {}, meta: {} });
         d.source = url ? 'fallback' : 'static';
         d.loadError = err ? err.message : '';
         return d;
-      };
-      if (!url) return Promise.resolve(fallback(null));
+      });
+      if (!url) return fallback(null);
       return fetch(url, { redirect: 'follow', cache: 'no-store' })
         .then((r) => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json().then((d) => [d, r.headers.get('X-From-Cache') === '1']); })
         .then(([d, cached]) => { if (d.error) throw new Error(d.error); d.source = cached ? 'cached' : 'live'; return d; })

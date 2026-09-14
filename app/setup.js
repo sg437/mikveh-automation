@@ -81,7 +81,8 @@
       '<input id="s_url" type="url" dir="ltr" placeholder="https://script.google.com/macros/s/.../exec" value="' + esc(cfg.apiUrl || '') + '">' +
       '<small class="hint">בעורך הסקריפט: Deploy ⇠ Manage deployments ⇠ Web app ⇠ Copy. ההרשאה צריכה להיות Anyone.</small></div>' +
       '<div class="ff"><label for="s_token">טוקן (API_TOKEN)</label><input id="s_token" type="text" dir="ltr" value="' + esc(cfg.apiToken || '') + '" placeholder="רק אם הגדרת"></div>' +
-      '<div class="ff"><label for="s_cid">מזהה Google (Client ID)</label><input id="s_cid" type="text" dir="ltr" value="' + esc(cfg.googleClientId || '') + '" placeholder="....apps.googleusercontent.com"></div>' +
+      '<div class="ff"><label for="s_cid">מזהה Google (Client ID)</label><input id="s_cid" type="text" dir="ltr" value="' + esc(cfg.googleClientId || '') + '" placeholder="לא חובה – מגיע מהסקריפט">' +
+      '<small class="hint">אפשר להשאיר ריק. המזהה נלקח מ-<code dir="ltr">GOOGLE_CLIENT_ID</code> שבסקריפט.</small></div>' +
       '</div><div class="factions">' +
       '<button class="btn primary" type="submit" id="s_test">בדיקת חיבור ושמירה</button>' +
       (sv.apiUrl ? '<button class="btn" type="button" id="s_clear">ניתוק</button>' : '') +

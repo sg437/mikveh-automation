@@ -86,6 +86,9 @@ function apiHandle_(e, action) {
       const tok = (e.parameter && e.parameter.session) || '';
       data.me = tok ? authSession_(apiSpreadsheet_(), tok) : null;
       data.authEnabled = authEnabled_();
+      // ה-Client ID אינו סוד – הוא גלוי בכל דף שמציג כניסה עם Google. מסירת הערך
+      // כאן חוסכת הקלדה של 72 תווים בכל מכשיר, שהייתה מקור ל-invalid_client.
+      data.googleClientId = getProp_('GOOGLE_CLIENT_ID') || '';
       return jsonResponse_(data);
     }
     return jsonResponse_({ error: 'unknown action: ' + action });

@@ -41,10 +41,16 @@
     const K = MK();
     K.$('#loginModal').hidden = false;
     const box = K.$('#gsiButton'); box.innerHTML = '<div class="hint">טוען את הכניסה של Google...</div>';
-    const cid = (window.MIKVEH_CONFIG || {}).googleClientId;
-    if (!cid) { box.innerHTML = '<div class="fmsg bad">חסר googleClientId בקובץ config.js</div>'; return; }
+    // הערך מהשרת קודם: הוא תמיד הנכון. ההגדרה במכשיר נשארת כגיבוי בלבד.
+    const cid = (K.S.data && K.S.data.googleClientId) || (window.MIKVEH_CONFIG || {}).googleClientId;
+    if (!cid) {
+      box.innerHTML = '<div class="fmsg bad">לא הוגדר מזהה Google. מנהל המערכת צריך להגדיר ' +
+        '<code dir="ltr">GOOGLE_CLIENT_ID</code> במאפייני הסקריפט.</div>';
+      return;
+    }
     loadGis().then(() => {
       box.innerHTML = '';
+      try { google.accounts.id.disableAutoSelect(); } catch (e) { /* ignore */ }
       google.accounts.id.initialize({ client_id: cid, callback: (resp) => loginWithToken(resp.credential), ux_mode: 'popup', auto_select: false, itp_support: true });
       google.accounts.id.renderButton(box, { theme: 'filled_blue', size: 'large', text: 'signin_with', shape: 'pill', locale: 'he', width: 280 });
     }).catch((err) => { box.innerHTML = '<div class="fmsg bad">' + esc(err.message) + '</div>'; });
