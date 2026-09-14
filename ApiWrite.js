@@ -124,6 +124,35 @@ function dateOf_(s) {
   return isNaN(d) ? new Date() : d;
 }
 
+/**
+ * גשר לקבוצת הוואטסאפ: שולח לקבוצת הדיווחים סיכום של דיווח שנרשם במערכת,
+ * כדי שמי שעדיין עובד בקבוצה יראה אותו בתקופת המעבר. פעיל רק כש-WA_BRIDGE=1.
+ *
+ * נשלח רק על דיווחי פעולות ודוחות פיקוח – לא על שיחות הדיונים, שהיו מציפות
+ * את הקבוצה.
+ *
+ * אין סכנת לולאה: הקולט ב-קוד.js מקבל רק incomingMessageReceived
+ * (CONFIG.ACCEPTED_WEBHOOKS), והודעה שנשלחת דרך ה-API מייצרת webhook יוצא –
+ * ולכן אינה נקלטת בחזרה כדיווח חדש.
+ *
+ * לא זורק שגיאה: תקלה בוואטסאפ לא תפיל דיווח שכבר נרשם בגיליון.
+ */
+function bridgeToGroup_(text) {
+  try {
+    if (getProp_('WA_BRIDGE') !== '1') return;
+    const chatId = getProp_('GROUP_CHAT_ID');
+    const idInstance = getProp_('GREEN_ID_INSTANCE');
+    const apiToken = getProp_('GREEN_API_TOKEN');
+    if (!chatId || !idInstance || !apiToken) return;
+    UrlFetchApp.fetch('https://api.green-api.com/waInstance' + idInstance + '/sendMessage/' + apiToken, {
+      method: 'post', contentType: 'application/json', muteHttpExceptions: true,
+      payload: JSON.stringify({ chatId: chatId, message: text }),
+    });
+  } catch (err) {
+    Logger.log('bridgeToGroup_ failed: ' + err);
+  }
+}
+
 // ==================== פעולה ====================
 
 function writeAction_(ss, d, user) {
@@ -163,6 +192,8 @@ function writeAction_(ss, d, user) {
     reservoirSealed: row[14], note2: row[15], liters: row[19] || null, validMonth: row[20], validYear: row[21],
     mikvehId: apiNorm_(mikveh), source: 'app', by: user.name,
   });
+  bridgeToGroup_('📝 ' + user.name + ' דיווח/ה במערכת\n' + mikveh + ' — ' + action +
+    (row[6] ? ' (' + row[6] + ')' : '') + (row[10] ? '\n' + row[10] : ''));
   return { ok: true, record: record };
 }
 
@@ -183,6 +214,7 @@ function writeInspection_(ss, d, user) {
   row[3] = txt_(d.contact, 80);
   row[4] = txt_(d.phone, 40);
   sh.appendRow(row);
+  bridgeToGroup_('📋 דוח פיקוח חדש נרשם במערכת\n' + mikveh + ' — ' + (row[2] || user.name));
   return { ok: true, record: { ts: apiIsoDate_(when), mikveh: mikveh, mikvehId: apiNorm_(mikveh), rabbi: row[2], by: user.name } };
 }
 
