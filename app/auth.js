@@ -5,7 +5,9 @@
 (function () {
   'use strict';
   const KEY = 'mikveh.session';
-  const ROLES = ['מנהל', 'מפקח', 'בלנית', 'צופה'];
+  const ROLES = ['מנהל', 'מפקח', 'קבלן', 'צופה'];
+  const ROLE_ALIASES = { 'בלנית': 'קבלן' }; // שם תפקיד ישן שנשמר בגיליון
+  const roleOf = (r) => ROLE_ALIASES[String(r || '').trim()] || String(r || '').trim();
   const MK = () => window.MK;
   const esc = (s) => MK().esc(s);
 
@@ -116,7 +118,7 @@
         const tb = root.querySelector('#usersTable tbody');
         tb.innerHTML = (res.users || []).map((x) => '<tr data-id="' + esc(x.id) + '"><td>' + (x.picture ? '<img class="avatar" src="' + esc(x.picture) + '" alt="" referrerpolicy="no-referrer">' : '👤') + '</td><td>' + esc(x.name) + '</td><td>' + esc(x.email || '') + '</td>' +
           '<td><input class="cell-input" type="tel" data-f="phone" value="' + esc(x.phone || '') + '" placeholder="05x-xxxxxxx"></td>' +
-          '<td><select data-f="role">' + ROLES.map((r) => '<option' + (r === x.role ? ' selected' : '') + '>' + r + '</option>').join('') + '</select></td>' +
+          '<td><select data-f="role">' + ROLES.map((r) => '<option' + (r === roleOf(x.role) ? ' selected' : '') + '>' + r + '</option>').join('') + '</select></td>' +
           '<td><label class="pill chk"><input type="checkbox" data-f="active"' + (x.active ? ' checked' : '') + '><span>' + (x.active ? 'פעיל' : 'מושבת') + '</span></label></td><td>' + esc(x.lastLogin ? K.hebOf(x.lastLogin) + ' ' + K.fmtDate(x.lastLogin) : '') + '</td></tr>').join('') || '<tr><td colspan="7" class="empty">אין משתמשים</td></tr>';
         tb.querySelectorAll('[data-f]').forEach((el) => el.addEventListener('change', () => {
           const id = el.closest('tr').dataset.id;

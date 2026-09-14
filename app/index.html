@@ -50,12 +50,27 @@
   .pstage.ok{border-left-color:var(--ok);background:var(--ok-soft)}
   .pstage.warn{border-left-color:var(--warn);background:var(--warn-soft)}
   .pstage.bad{border-left-color:var(--bad);background:var(--bad-soft)}
-  .pstage.crit{border-left-width:6px;border-left-style:double}
+  /* נקודת אל-חזור: טבעת רכה סביב הכרטיס. border-left-style:double שהיה כאן צייר
+     שתי מסגרות שבורות בפינות המעוגלות; box-shadow עוקב אחרי ה-border-radius. */
+  .pstage.crit{border-left-width:6px;box-shadow:0 0 0 2px var(--warn-soft)}
   .pstage .ps-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px;font-size:.92rem}
   .pstage .ps-row{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
   .pstage .ps-row select,.pstage .ps-row input[type=date]{padding:4px 7px;border:1px solid var(--line);border-radius:6px;background:var(--card)}
   .pstage .ps-row input[type=text]{flex:1;min-width:140px;padding:4px 7px;border:1px solid var(--line);border-radius:6px;background:var(--card)}
   .pstage .ps-by{display:block;margin-top:4px;color:var(--muted);font-size:.78rem}
+  .pstage .ps-who{display:inline-flex;align-items:center;gap:5px;font-size:.8rem;color:var(--muted)}
+  .pstage .ps-who select{max-width:150px}
+  /* כרטיס פרויקט נפתח: עם הרבה פרויקטים הצ'ק-ליסטים הפתוחים הציפו את המסך */
+  .pcard{padding:0;overflow:hidden}
+  .pcard > summary{list-style:none;cursor:pointer;padding:12px 16px;display:flex;gap:10px;align-items:flex-start}
+  .pcard > summary::-webkit-details-marker{display:none}
+  .pcard > summary:hover{background:var(--brand-soft)}
+  .pcard > summary .phead{flex:1;min-width:0}
+  .pcard > summary .pchev{color:var(--muted);font-size:.8rem;line-height:1.9;transition:transform .15s}
+  .pcard[open] > summary{border-bottom:1px solid var(--line);background:var(--brand-soft)}
+  .pcard[open] > summary .pchev{transform:rotate(180deg)}
+  .pcard .pbody{padding:10px 16px 14px}
+  .pcard .pbody .pstages{margin-top:0}
   .btn.danger{color:var(--bad);border-color:var(--bad)}
   .btn.danger:hover{background:var(--bad-soft)}
   .cell-input{width:120px;max-width:100%;padding:4px 7px;border:1px solid var(--line);border-radius:6px;background:var(--card);direction:ltr;text-align:start}

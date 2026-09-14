@@ -3,7 +3,7 @@
  */
 (function () {
   'use strict';
-  const ROLES = ['מפקח', 'בלנית', 'צופה'];
+  const ROLES = ['מפקח', 'קבלן', 'צופה'];
   const MK = () => window.MK;
   const esc = (s) => MK().esc(s);
 
