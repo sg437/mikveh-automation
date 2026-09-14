@@ -1,0 +1,62 @@
+# מעלה את קבצי ה-Apps Script ומעדכן את הפריסה הקיימת, בכל דחיפה ל-main.
+# מחליף את הסבב הידני: הורדת ZIP ⇠ UPLOAD ⇠ Deploy ⇠ New version.
+#
+# דורש שני סודות ב-Settings ⇠ Secrets and variables ⇠ Actions:
+#   CLASPRC_JSON          — תוכן הקובץ ~/.clasprc.json מהמחשב (אסימון הכניסה של clasp)
+#   CLASP_DEPLOYMENT_ID   — מזהה הפריסה הקיימת (Deploy ⇠ Manage deployments)
+#
+# הפריסה הקיימת מתעדכנת ולא נוצרת חדשה, כדי שכתובת ה-Webhook של Green API
+# תישאר אותה כתובת והקולט של הוואטסאפ ימשיך לעבוד.
+name: העלאת הסקריפט
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '*.js'
+      - 'appsscript.json'
+      - '.clasp.json'
+      - '.claspignore'
+      - '.github/workflows/apps-script.yml'
+  workflow_dispatch:
+
+# שתי הרצות במקביל היו דורסות זו את זו באותו פרויקט סקריפט
+concurrency:
+  group: apps-script
+  cancel-in-progress: false
+
+jobs:
+  push:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: התקנת clasp
+        run: |
+          npm install -g @google/clasp
+          clasp --version
+
+      - name: אימות מול Google
+        run: |
+          printf '%s' "$CLASPRC" > "$HOME/.clasprc.json"
+          test -s "$HOME/.clasprc.json" || { echo "::error::הסוד CLASPRC_JSON ריק או חסר"; exit 1; }
+        env:
+          CLASPRC: ${{ secrets.CLASPRC_JSON }}
+
+      - name: העלאת קבצי הסקריפט
+        run: clasp push --force
+
+      - name: עדכון הפריסה הקיימת בגרסה חדשה
+        run: |
+          test -n "$DEPLOY_ID" || { echo "::error::הסוד CLASP_DEPLOYMENT_ID חסר"; exit 1; }
+          clasp deploy --deploymentId "$DEPLOY_ID" --description "אוטומטי ${{ github.sha }}"
+        env:
+          DEPLOY_ID: ${{ secrets.CLASP_DEPLOYMENT_ID }}
+
+      - name: ניקוי האסימון מהמריץ
+        if: always()
+        run: rm -f "$HOME/.clasprc.json"
