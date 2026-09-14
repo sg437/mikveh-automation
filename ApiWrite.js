@@ -216,13 +216,16 @@ function writeMessage_(ss, d, user) {
   const sh = messagesSheet_(ss);
   const id = Utilities.getUuid();
   const now = new Date();
-  sh.appendRow([id, now, mikveh, user.name, user.phone, text, txt_(d.replyTo, 60), 'app', group]);
+  // "מקור": system להודעות שהמערכת מייצרת (פתיחת משימות, לקיחה, ביצוע...).
+  // בלי זה הן נשמרות כהודעת משתמש רגילה, וחוזרות מהגיליון עם "השב" ותגובות אימוג'י.
+  const source = d._system ? 'system' : 'app';
+  sh.appendRow([id, now, mikveh, user.name, user.phone, text, txt_(d.replyTo, 60), source, group]);
   // אזכור @שם ➜ התראה אישית
   if (text.indexOf('@') >= 0 && !d._system) {
     const mentioned = authUsers_(ss).filter(function (u) { return u.active && u.phone && u.name && text.indexOf('@' + u.name) >= 0 && u.name !== user.name; });
     if (mentioned.length) notifyUsers_(mentioned, '💬 ' + user.name + ' הזכיר/ה אותך ב' + (mikveh ? 'דיון על ' + mikveh : 'דיון הכללי') + ':\n' + text.slice(0, 300) + '\n\nלתגובה: פתח/י את מערכת המקוואות ➜ דיונים');
   }
-  return { ok: true, record: { id: id, ts: apiIsoDate_(now), mikveh: mikveh || null, mikvehId: mikveh ? apiNorm_(mikveh) : null, group: group || null, author: user.name, authorId: user.id || null, phone: user.phone, text: text, replyTo: txt_(d.replyTo, 60) || null, source: 'app' } };
+  return { ok: true, record: { id: id, ts: apiIsoDate_(now), mikveh: mikveh || null, mikvehId: mikveh ? apiNorm_(mikveh) : null, group: group || null, author: user.name, authorId: user.id || null, phone: user.phone, text: text, replyTo: txt_(d.replyTo, 60) || null, source: source } };
 }
 
 /** כל ההודעות (עד MSG_LIMIT האחרונות), בסדר עולה. since = ISO: רק הודעות חדשות ממנו. */

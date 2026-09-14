@@ -1,5 +1,5 @@
 /* Service worker: מטמון של קבצי האפליקציה לעבודה לא מקוונת. להעלות גרסה בכל שינוי. */
-const CACHE = 'mikveh-app-v16';
+const CACHE = 'mikveh-app-v17';
 const FILES = ['./', './index.html', './app.js', './forms.js', './talk.js', './work.js', './media.js', './edit.js', './setup.js', './perms.js', './contractor.js', './auth.js', './config.js', './hebdate.js', './data.js', './manifest.json',
   './privacy.html', './terms.html', './legal.css',
   './icon-192.png', './icon-512.png', './icon-maskable-512.png', './apple-touch-icon.png',

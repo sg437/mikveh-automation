@@ -82,7 +82,13 @@
     const K = MK();
     const me = K.getUser().name && m.author === K.getUser().name;
     const q = m.replyTo ? all().find((x) => x.id === m.replyTo) : null;
-    if (m.source === 'system') return '<div class="msg sys" data-id="' + esc(m.id) + '"><div class="mb">' + esc(m.text || '') + '</div><div class="mh"><span class="mt">' + esc(K.hebOf(m.ts)) + ' · ' + esc(K.fmtDate(m.ts)) + '</span></div></div>';
+    if (m.source === 'system') {
+      // הודעה על משימות לחלוקה מקבלת קישור ישיר למסך, במקום הפניה מילולית
+      const link = /חלוקת עבודה|משימות לחלוקה/.test(m.text || '')
+        ? '<div class="sys-act"><a class="btn small" href="#/work">פתח את חלוקת העבודה ➜</a></div>' : '';
+      return '<div class="msg sys" data-id="' + esc(m.id) + '"><div class="mb">' + esc(m.text || '') + '</div>' + link +
+        '<div class="mh"><span class="mt">' + esc(K.hebOf(m.ts)) + ' · ' + esc(K.fmtDate(m.ts)) + '</span></div></div>';
+    }
     const time = K.parseISO(m.ts) ? K.parseISO(m.ts).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' }) : '';
     return '<div class="row ' + (me ? 'me' : '') + '">' +
       (me ? '' : '<span class="av" style="background:' + colorOf(m.author) + '">' + esc(initials(m.author)) + '</span>') +
