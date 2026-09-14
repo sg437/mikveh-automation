@@ -249,10 +249,10 @@ function handlePollUpdate_(data) {
       if (after.length) byVoter[chatId] = after; else delete byVoter[chatId];
     });
 
-    let applied = 0, blocked = 0;
+    let applied = 0, blocked = 0, missing = 0;
     changes.forEach(function (ch) {
       const rec = items[map[ch.option]];
-      if (!rec) return;
+      if (!rec) { missing++; return; } // המשימה נמחקה מ"שיבוצים" אחרי שהסקר נשלח
       const who = workPollVoter_(ss, ch.chatId, names);
       if (ch.take) {
         if (rec.status === 'done') { blocked++; return; }
@@ -271,10 +271,12 @@ function handlePollUpdate_(data) {
 
     sh.getRange(rowNum, 7, 1, 2).setValues([[JSON.stringify({ byVoter: byVoter, names: names }), new Date()]]);
     if (applied) apiInvalidateData_();
+    const note = [];
+    if (blocked) note.push(blocked + ' סימונים על משימות שכבר נלקחו');
+    if (missing) note.push(missing + ' סימונים על משימות שאינן בלשונית "' + WRITE.WORK_SHEET + '" (נמחקו?)');
     workPollLog_(ss, data, String(row[3] || ''),
-      applied ? 'נרשמו ' + applied + ' שינויים' : 'אין שינוי',
-      blocked ? blocked + ' סימונים על משימות שכבר נלקחו' : '');
-    return { status: 'poll', idMessage: data.idMessage || '', applied: applied, blocked: blocked };
+      applied ? 'נרשמו ' + applied + ' שינויים' : 'אין שינוי', note.join(' · '));
+    return { status: 'poll', idMessage: data.idMessage || '', applied: applied, blocked: blocked, missing: missing };
   } catch (err) {
     try { logError_('handlePollUpdate_', err, JSON.stringify(data || {}).slice(0, 500)); } catch (ignore) {}
     return { status: 'error', message: String(err) };
@@ -472,6 +474,28 @@ function testWorkPoll() {
       'סימונים שנקלטו: ' + marked, 'משימות: ' + found + '/' + Object.keys(map).length,
       'שקט ' + quiet + ' דק׳', v[8] ? 'סיכום נשלח' : 'טרם נשלח סיכום'].join(' | '));
   });
+
+  // המשימות עצמן — כדי לראות מיד אם "משימות: 0/3" נובע מכך שהשורות נמחקו
+  // מלשונית "שיבוצים", או שהמזהים אינם תואמים
+  const wsh = ss.getSheetByName(WRITE.WORK_SHEET);
+  Logger.log('— לשונית "' + WRITE.WORK_SHEET + '" —');
+  if (!wsh) {
+    Logger.log('❌ הלשונית לא קיימת בגיליון! בלעדיה אין משימות ואין מה לסמן.');
+  } else {
+    const wlast = wsh.getLastRow();
+    Logger.log('שורות: ' + Math.max(0, wlast - 1));
+    if (wlast > 1) {
+      const ids = wsh.getRange(Math.max(2, wlast - 4), 1, Math.min(5, wlast - 1), 4).getValues();
+      ids.forEach(function (r) { Logger.log('בגיליון: ' + r[0] + ' | ' + r[3] + ' | ' + r[2]); });
+    }
+    const lastPoll = values[values.length - 1];
+    const lastMap = workPollParse_(lastPoll[5]);
+    Object.keys(lastMap).slice(0, 5).forEach(function (k) {
+      Logger.log('הסקר מחפש: ' + lastMap[k] + ' | ' + k);
+    });
+    Logger.log('אם המזהים שהסקר מחפש אינם ברשימה שבגיליון — המשימות נמחקו מאז ' +
+      'שהסקר נשלח, ולכן אין למה לקשר את הסימון. הפתרון: לשלוח תכנון עבודה חדש.');
+  }
 
   const log = ss.getSheetByName(WORK_POLL.LOG_SHEET);
   Logger.log('— יומן ההצבעות —');
