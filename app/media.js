@@ -9,9 +9,12 @@
   const esc = (s) => MK().esc(s);
   /** קישור הורדה ישיר מהדרייב – בדפדפן נייד הקובץ יורד למכשיר ומופיע בגלריה. */
   function dlUrl(m) { return m && m.fileId ? 'https://drive.google.com/uc?export=download&id=' + encodeURIComponent(m.fileId) : (m && (m.url || m.view)) || ''; }
-  function saveBtn(m) {
+  /** כפתור "שמור" – צף על התמונה, ובשורה נפרדת ליד נגן ההקלטה (שלא יסתיר את הכפתורים). */
+  function saveBtn(m, inline) {
     const u = dlUrl(m);
-    return u ? '<a class="msave" href="' + esc(u) + '" target="_blank" rel="noopener" title="שמירת הקובץ למכשיר">⬇ שמור</a>' : '';
+    if (!u) return '';
+    const label = m && m.kind === 'audio' ? '⬇ שמירת ההקלטה' : '⬇ שמור';
+    return '<a class="msave' + (inline ? ' inline' : '') + '" href="' + esc(u) + '" target="_blank" rel="noopener" download title="שמירת הקובץ למכשיר">' + label + '</a>';
   }
 
   function kindOf(mime, name) {
@@ -212,7 +215,7 @@
   function thumbs(list) {
     if (!list.length) return '';
     return '<div class="mthumbs">' + list.map((m) => {
-      if (m.kind === 'audio') return '<div class="mwrap"><audio class="mplay" controls preload="none" src="' + esc(m.view || m.url) + '"></audio>' + saveBtn(m) + '</div>';
+      if (m.kind === 'audio') return '<div class="mwrap aud"><audio class="mplay" controls preload="none" src="' + esc(m.view || m.url) + '"></audio>' + saveBtn(m, true) + '</div>';
       if (m.kind === 'video') return '<div class="mwrap"><a class="mvid" href="' + esc(m.url || m.view) + '" target="_blank" rel="noopener">🎬 סרטון<small>' + esc(m.name || '') + '</small></a>' + saveBtn(m) + '</div>';
       return '<div class="mwrap"><a href="' + esc(m.url || m.view) + '" target="_blank" rel="noopener" title="' + esc(m.name || '') + '"><img src="' + esc(m.thumb || m.view) + '" alt="" loading="lazy" referrerpolicy="no-referrer"></a>' + saveBtn(m) + '</div>';
     }).join('') + '</div>';
@@ -253,7 +256,7 @@
       const inner = '<div class="pc"><span class="badge brand">' + esc(it.src) + '</span> <span class="pt">' + esc(K.hebOf(it.ts)) + '</span><div class="pcap">' + esc((it.cap || '').slice(0, 160)) + '</div>' + (it.who ? '<small>' + esc(it.who) + '</small>' : '') + '</div>';
       const card = it.kind === 'audio' ? '<div class="pcard">' + head + inner + '</div>'
         : '<a class="pcard" href="' + esc(it.url || it.view) + '" target="_blank" rel="noopener">' + head + inner + '</a>';
-      return '<div class="mwrap">' + card + saveBtn(it) + '</div>';
+      return '<div class="mwrap' + (it.kind === 'audio' ? ' aud' : '') + '">' + card + saveBtn(it, it.kind === 'audio') + '</div>';
     }).join('') + '</div></div>';
   }
   function photosCount(m) { const K = MK(); return forMikveh(m.id).length + (K.S.wa[m.id] || []).reduce((n, w) => n + (w.media || []).length, 0); }

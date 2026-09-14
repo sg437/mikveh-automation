@@ -25,8 +25,9 @@ const CONFIG = {
   // סוגי Webhook שאנחנו קולטים (הודעות נכנסות מחברי הקבוצה)
   ACCEPTED_WEBHOOKS: ['incomingMessageReceived'],
 
-  // סוגי הודעות שאין טעם לרשום (אימוג'י-תגובה וכו')
-  IGNORED_TYPES: ['reactionMessage'],
+  // סוגי הודעות שאין טעם לרשום (אימוג'י-תגובה, סקר שנפתח בקבוצה וכו').
+  // pollUpdateMessage (הצבעה בסקר) אינו כאן — הוא מטופל ב-WorkPoll.js.
+  IGNORED_TYPES: ['reactionMessage', 'pollMessage'],
 };
 
 // תרגום סוג המדיה לעברית (כמו ה-switch הישן בבלון 23)
@@ -41,6 +42,8 @@ const TYPE_LABELS = {
   stickerMessage: 'סטיקר',
   locationMessage: 'מיקום',
   contactMessage: 'איש קשר',
+  pollMessage: 'סקר',
+  pollUpdateMessage: 'הצבעה בסקר',
 };
 
 // עמודות לשונית "תור נכנס" — סדר העמודות קבוע, לא לשנות!
@@ -159,6 +162,13 @@ function handleNotification_(data) {
     // 5. בדיקת כפילויות לפי idMessage — קודם במטמון מהיר, ואז בגיליון
     if (isDuplicate_(idMessage)) {
       return { status: 'duplicate', idMessage: idMessage };
+    }
+
+    // 5ב. הצבעה בסקר חלוקת העבודה — נרשמת ישירות בלשונית "שיבוצים" (WorkPoll.js)
+    //     ואינה נכנסת לתור: אין בה דיווח לעיבוד בג'מיני.
+    if (typeMessage === 'pollUpdateMessage') {
+      CacheService.getScriptCache().put('msg_' + idMessage, '1', 21600);
+      return handlePollUpdate_(data);
     }
 
     // 6. איחוד הטקסט — המקבילה של נוסחת ifempty הישנה

@@ -357,9 +357,13 @@ function addWorkItems_(ss, d, user) {
   // התראה למפקחים ולמנהלים (חוץ מהפותח)
   notifyUsers_(authUsers_(ss).filter(function (u) { return u.active && u.phone && (u.role === 'מפקח' || u.role === 'מנהל') && u.name !== user.name; }),
     '📋 ' + user.name + ' פתח/ה ' + records.length + ' משימות לחלוקה (' + typeLabel + '): ' + names.slice(0, 15).join(', ') + (names.length > 15 ? ' ועוד' : '') + '\n\nלבחירה: מערכת המקוואות ➜ חלוקת עבודה ➜ "אני לוקח"');
-  bridgeToGroup_('📋 תכנון עבודה חדש (' + typeLabel + ') — ' + records.length + ' מקוואות\n' +
-    names.slice(0, 20).join(', ') + (names.length > 20 ? ' ועוד ' + (names.length - 20) : '') +
-    '\n\nלבחירה: מערכת המקוואות ➜ חלוקת עבודה');
+  // לקבוצת הוואטסאפ: סקר לבחירה (WA_WORK_POLL=1) — מי שמסמן, המשימה נרשמת על שמו
+  // במערכת (WorkPoll.js). אם הסקר כבוי או נכשל — הודעת הטקסט של הגשר, כמקודם.
+  if (!workPollSend_(ss, records, typeLabel, user)) {
+    bridgeToGroup_('📋 תכנון עבודה חדש (' + typeLabel + ') — ' + records.length + ' מקוואות\n' +
+      names.slice(0, 20).join(', ') + (names.length > 20 ? ' ועוד ' + (names.length - 20) : '') +
+      '\n\nלבחירה: מערכת המקוואות ➜ חלוקת עבודה');
+  }
   return { ok: true, records: records, message: msg.record || null, skipped: skipped };
 }
 
@@ -413,11 +417,13 @@ function updateWorkItem_(ss, d, user) {
   sh.getRange(rowNum, 1, 1, row.length).setValues([row]);
   const rec = workRecord_(row);
   rec.mikvehId = apiNorm_(rec.mikveh);
-  // הודעת מערכת בדיון הכללי כדי שכולם יראו מי לקח מה
+  // הודעת מערכת בדיון הכללי כדי שכולם יראו מי לקח מה.
+  // d.via — מאיפה הגיע העדכון כשאינו מהאפליקציה (למשל "מהסקר בוואטסאפ").
   const m = String(rec.mikveh || '');
-  const text = status === 'taken' ? '✋ ' + user.name + ' לוקח/ת: ' + m + ' (' + WORK_TYPES[rec.type] + ')'
+  const via = d.via ? ' · ' + txt_(d.via, 40) : '';
+  const text = (status === 'taken' ? '✋ ' + user.name + ' לוקח/ת: ' + m + ' (' + WORK_TYPES[rec.type] + ')'
     : status === 'done' ? '✅ ' + user.name + ' סיים/ה: ' + m + ' (' + WORK_TYPES[rec.type] + ')'
-    : '↩️ ' + user.name + ' שחרר/ה: ' + m;
+    : '↩️ ' + user.name + ' שחרר/ה: ' + m) + via;
   const msg = writeMessage_(ss, { mikveh: '', text: text, _system: true }, user);
   if (msg.record) msg.record.source = 'system';
   // התראה למי שפתח את המשימה

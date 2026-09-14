@@ -8,6 +8,14 @@
 (function () {
   'use strict';
 
+  // ============================================================ אפליקציית הדיונים
+  // הדיונים רצים גם כאפליקציה נפרדת להתקנה בטלפון, מתיקייה משלה (app/talk/),
+  // כדי שלכרום תהיה אפליקציה שנייה להתקנה ולא הרחבה של המערכת המותקנת.
+  // `?app=talk` נשמר לתאימות לאחור – קיצורים שכבר נשמרו במכשירים ממשיכים לעבוד.
+  const TALK_APP = !!window.TALK_APP || /[?&]app=talk/.test(location.search);
+  // מתיקיית talk/ הקבצים המשותפים נמצאים ברמה אחת מעל
+  const BASE = window.TALK_APP ? '../' : '';
+
   // ============================================================ מקור נתונים
   // חיבור חי לגיליון דרך ה-Apps Script (Api.js). אם אין כתובת או שהרשת נופלת –
   // האפליקציה ממשיכה לעבוד מקובץ data.js (עותק סטטי).
@@ -28,7 +36,7 @@
         if (window.MIKVEH_DATA) return Promise.resolve(window.MIKVEH_DATA);
         return new Promise((resolve) => {
           const sc = document.createElement('script');
-          sc.src = 'data.js';
+          sc.src = BASE + 'data.js';
           sc.onload = () => resolve(window.MIKVEH_DATA || null);
           sc.onerror = () => resolve(null);
           document.head.appendChild(sc);
@@ -733,7 +741,7 @@
       '<a href="#/plan/drained"><span class="ic">💧</span> מאגרים לתכנון מילוי <span class="n">' + drained + '</span></a>' +
       '<a href="#/tasks"><span class="ic">⚠️</span> משימות דחופות <span class="n ' + (urgentTasks ? 'warn' : '') + '">' + urgentTasks + '</span></a>' +
       '<a href="#/talk"><span class="ic">💬</span> דיונים <span class="n">' + (S.data.messages || []).length + '</span></a>' +
-      '<a href="?app=talk#/talk" target="_blank" rel="noopener" title="פתיחת הדיונים בחלון נפרד – אפשר להתקין בטלפון כאפליקציה"><span class="ic">📲</span> הדיונים כאפליקציה</a>' +
+      '<a href="talk/" target="_blank" rel="noopener" title="פתיחת הדיונים בחלון נפרד – ומשם ׳התקן אפליקציה׳ לאייקון נפרד בטלפון"><span class="ic">📲</span> הדיונים כאפליקציה</a>' +
     '</div>';
 
     // פעילות אחרונה: פעולות + דיווחי וואטסאפ + הודעות, לפי זמן
@@ -1213,7 +1221,7 @@
     if (window.MikvehSetup) MikvehSetup.banner(data.source);
     window.MK = { S, $, esc, hebOf, fmtDate, parseISO, badge, tel, findByName, DataSource, route, buildIndexes: rebuild, addAction, getUser, requireUser, openUserModal, toast, openReport, closeReport, pickMikveh, exportTable, uniq, fillSelect, certRows, drainedRows };
     // מצב "אפליקציית דיונים" – פתיחה ישירה בדיונים, בלי שאר המסכים
-    if (/[?&]app=talk/.test(location.search)) {
+    if (TALK_APP) {
       document.body.classList.add('talk-app');
       if (!location.hash || location.hash === '#/') location.hash = '#/talk';
     }
@@ -1237,7 +1245,7 @@
     window.addEventListener('hashchange', route);
     route();
     if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
-      navigator.serviceWorker.register('sw.js').catch(() => {});
+      navigator.serviceWorker.register('sw.js').catch(() => {}); // בתיקיית talk/ נרשם ה-SW שלה (נתיב יחסי למסמך)
     }
   }).catch((err) => {
     document.querySelector('main').innerHTML = '<div class="empty">שגיאה בטעינת הנתונים: ' + esc(err.message) + '</div>';

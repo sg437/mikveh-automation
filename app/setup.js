@@ -58,6 +58,8 @@
       ['תזכורות תעודה', p.alertChat ? OK : NO('ALERT_CHAT_ID')],
       ['תכנון עבודה לקבוצת הוואטסאפ', p.waBridge ? OK + ' <small>– פתיחת משימות לחלוקה מודיעה לקבוצה</small>'
         : NO('WA_BRIDGE=1', '+ GROUP_CHAT_ID')],
+      ['סקר חלוקת עבודה בוואטסאפ', p.waWorkPoll ? OK + ' <small>– מי שמסמן בסקר, המשימה נרשמת על שמו</small>'
+        : NO('WA_WORK_POLL=1', '+ GROUP_CHAT_ID והרצת installWorkPollTrigger')],
       ['מי רשאי להיכנס', p.openSignup
         ? '<span class="badge warn">כל חשבון Google</span> נרשם לבד כ<b>' + esc(p.defaultRole || 'מפקח') + '</b>' +
           ' <small>– להסיר <code dir="ltr">OPEN_SIGNUP</code> כדי לסגור</small>'
