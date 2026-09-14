@@ -8,7 +8,7 @@ name: פרסום האפליקציה
 on:
   push:
     branches: [main]
-    paths: ['app/**', '.github/workflows/pages.yml']
+    paths: ['app/**', 'tools/make_talk.py', '.github/workflows/pages.yml']
   workflow_dispatch:
 
 permissions:
@@ -29,6 +29,10 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: actions/configure-pages@v5
+      # אפליקציית הדיונים (app/talk/) נבנית מחדש מ-app/index.html בכל פרסום,
+      # כדי שלא תישאר מאחור אחרי שינוי במסכים.
+      - name: בניית אפליקציית הדיונים
+        run: python3 tools/make_talk.py
       - uses: actions/upload-pages-artifact@v3
         with:
           path: app

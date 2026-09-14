@@ -1,7 +1,7 @@
 /* Service worker: מטמון של קבצי האפליקציה לעבודה לא מקוונת. להעלות גרסה בכל שינוי.
    data.js (~3.6MB) אינו ברשימה בכוונה: הוא רק עותק גיבוי, והכללתו גרמה להורדה
    מחדש של 3.6MB בכל העלאת גרסה. הוא נכנס למטמון לבד אם וכאשר הוא נטען. */
-const CACHE = 'mikveh-app-v26';
+const CACHE = 'mikveh-app-v27';
 const FILES = ['./', './index.html', './app.js', './forms.js', './talk.js', './work.js', './media.js', './edit.js', './setup.js', './perms.js', './contractor.js', './auth.js', './config.js', './hebdate.js', './manifest.json',
   './privacy.html', './terms.html', './legal.css',
   './icon-192.png', './icon-512.png', './icon-maskable-512.png', './apple-touch-icon.png',
@@ -13,7 +13,9 @@ self.addEventListener('install', (e) => {
 
 self.addEventListener('activate', (e) => {
   e.waitUntil(
-    caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
+    // רק המטמונים של המערכת. המטמון של אפליקציית הדיונים (mikveh-talk-*) שייך
+    // ל-service worker אחר באותו מקור, ומחיקתו כאן הייתה מרוקנת לו את המטמון.
+    caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== CACHE && k.indexOf('mikveh-app-') === 0).map((k) => caches.delete(k))))
       .then(() => self.clients.claim())
   );
 });

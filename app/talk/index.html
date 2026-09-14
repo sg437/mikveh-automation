@@ -1,17 +1,18 @@
+<!-- נוצר אוטומטית מתוך app/index.html ע"י tools/make_talk.py — אין לערוך ידנית. -->
 <!DOCTYPE html>
 <html lang="he" dir="rtl">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>מערכת כשרות המקוואות</title>
+<title>דיוני כשרות המקוואות</title>
 <link rel="manifest" href="manifest.json" id="appManifest">
-<script>if(/[?&]app=talk/.test(location.search)){document.getElementById("appManifest").href="talk-manifest.json";document.addEventListener("DOMContentLoaded",function(){var i=document.querySelector('link[rel="apple-touch-icon"]');if(i)i.href="talk-icon-192.png";});}</script>
+<script>window.TALK_APP=1;</script>
 <meta name="theme-color" content="#123C5A">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="מקוואות">
+<meta name="apple-mobile-web-app-title" content="דיונים">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<link rel="apple-touch-icon" href="apple-touch-icon.png">
-<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="../talk-icon-192.png">
+<link rel="icon" href="../talk-icon-192.png">
 <style>
   :root{
     --bg:#F4F6F8; --card:#fff; --line:#D8DEE5; --ink:#1B2430; --muted:#5B6B7C;
@@ -593,7 +594,7 @@
 
   <!-- ===== הגדרות והרשאות ===== -->
   <section class="view" id="view-settings"><div id="setupBox"></div><div id="permsBox"></div>
-    <p class="legal-links"><a href="privacy.html">מדיניות פרטיות</a> · <a href="terms.html">תנאי שימוש</a></p>
+    <p class="legal-links"><a href="../privacy.html">מדיניות פרטיות</a> · <a href="../terms.html">תנאי שימוש</a></p>
   </section>
 
   <!-- ===== דיונים ===== -->
@@ -668,18 +669,18 @@
 <div class="umenu" id="userMenu" hidden></div>
 <div class="toast" id="toast" hidden></div>
 
-<script src="config.js"></script>
-<script src="hebdate.js"></script>
+<script src="../config.js"></script>
+<script src="../hebdate.js"></script>
 <!-- data.js (עותק גיבוי, ~3.6MB) נטען לפי דרישה מתוך app.js ולא חוסם את הפתיחה -->
-<script src="app.js"></script>
-<script src="forms.js"></script>
-<script src="talk.js"></script>
-<script src="work.js"></script>
-<script src="media.js"></script>
-<script src="edit.js"></script>
-<script src="setup.js"></script>
-<script src="perms.js"></script>
-<script src="contractor.js"></script>
-<script src="auth.js"></script>
+<script src="../app.js"></script>
+<script src="../forms.js"></script>
+<script src="../talk.js"></script>
+<script src="../work.js"></script>
+<script src="../media.js"></script>
+<script src="../edit.js"></script>
+<script src="../setup.js"></script>
+<script src="../perms.js"></script>
+<script src="../contractor.js"></script>
+<script src="../auth.js"></script>
 </body>
 </html>
