@@ -254,6 +254,9 @@ const PERM_ACTIONS = [
   { key: 'updateWorkItem', label: 'לקיחת משימה וסימון ביצוע', def: { 'מפקח': 1, 'בלנית': 1 } },
   { key: 'updateMikveh', label: 'עריכת פרטי מקווה', def: { 'מפקח': 1 } },
   { key: 'addMikveh', label: 'הוספת מקווה חדש', def: { 'מפקח': 1 } },
+  { key: 'addProject', label: 'פתיחת פרויקט בנייה / שיפוץ', def: { 'מפקח': 1 } },
+  { key: 'updateProject', label: 'עריכת פרטי פרויקט', def: { 'מפקח': 1 } },
+  { key: 'updateProjectStage', label: 'אישור שלב בצ\'ק-ליסט הבנייה', def: { 'מפקח': 1 } },
 ];
 const PERM_ROLES = ['מפקח', 'בלנית', 'צופה']; // מנהל תמיד הכל
 

@@ -294,6 +294,8 @@ function apiBuildData_() {
   const reactions = apiReactions_(ss);
   const contractors = apiContractors_(ss);
   const contractorMsgs = apiContractorMsgs_(ss);
+  const projects = apiProjects_(ss);
+  const projectStages = apiProjectStages_(ss);
 
   // קישור לפי שם מקווה מנורמל
   const ids = {};
@@ -317,6 +319,7 @@ function apiBuildData_() {
     },
     mikvaot: mikvaot, actions: actions, inspections: inspections, tasks: tasks, plugs: plugs, whatsapp: whatsapp, messages: messages, work: work, media: media,
     groups: groups, reactions: reactions, contractors: contractors, contractorMsgs: contractorMsgs,
+    projects: projects, projectStages: projectStages,
     users: authPublicUsers_(ss), perms: authPerms_(ss),
   };
 }
