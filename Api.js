@@ -97,6 +97,16 @@ function apiHandle_(e, action) {
 function apiPing_() {
   const id = getProp_(API.SHEET_ID_PROP);
   const out = { ok: true, mikvaotSheet: !!id, tokenRequired: !!getProp_(API.TOKEN_PROP), time: new Date().toISOString() };
+  // מה מוגדר בסקריפט – רק "מוגדר / לא מוגדר", בלי לחשוף ערכים. משמש את מסך החיבור באפליקציה.
+  out.props = {
+    googleClientId: !!getProp_('GOOGLE_CLIENT_ID'),
+    archiveFolder: !!getProp_('MIKVEH_ARCHIVE_FOLDER_ID'),
+    waAutoActions: getProp_('WA_AUTO_ACTIONS') === '1',
+    notifyWhatsapp: getProp_('NOTIFY_WHATSAPP') === '1',
+    greenApi: !!(getProp_('GREEN_ID_INSTANCE') && getProp_('GREEN_API_TOKEN')),
+    alertChat: !!getProp_('ALERT_CHAT_ID'),
+    defaultRole: getProp_('DEFAULT_ROLE') || ''
+  };
   if (id) {
     const ss = SpreadsheetApp.openById(id);
     out.mikvaotSheetName = ss.getName();
