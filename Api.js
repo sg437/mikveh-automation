@@ -141,6 +141,35 @@ function apiPing_() {
  * מראה כמה זמן לוקחת כל לשונית וכמה גדולה התשובה, כדי לדעת מה באמת מאט
  * את פתיחת האפליקציה במקום לנחש.
  */
+/**
+ * בדיקה שהמטמון באמת עובד – להרצה מהעורך.
+ *
+ * CacheService מוגבל גם במספר הפריטים בכתיבה אחת, והתשובה נשמרת בכ-35 פיסות.
+ * אם השמירה נכשלת, apiCachedDataJson_ בולע את השגיאה וממשיך להחזיר תשובה
+ * נכונה – פשוט בונה אותה מחדש בכל פעם, בלי שום סימן חיצוני.
+ */
+function testDataCache() {
+  apiInvalidateData_();
+  const t1 = Date.now();
+  const first = apiCachedDataJson_();
+  const ms1 = Date.now() - t1;
+
+  const t2 = Date.now();
+  const second = apiCachedDataJson_();
+  const ms2 = Date.now() - t2;
+
+  Logger.log('בנייה ראשונה (בלי מטמון): ' + ms1 + ' ms, ' + Math.round(first.length / 1024) + ' KB');
+  Logger.log('קריאה שנייה (מהמטמון):    ' + ms2 + ' ms, ' + Math.round(second.length / 1024) + ' KB');
+
+  const n = CacheService.getScriptCache().get(DATA_CACHE.PREFIX + 'n');
+  Logger.log('פיסות שנשמרו במטמון: ' + (n || 'אף אחת'));
+
+  if (second.length !== first.length) { Logger.log('❌ התשובות שונות באורכן – יש תקלה במטמון'); return; }
+  if (!n) { Logger.log('❌ המטמון לא נשמר כלל. כל טעינה בונה מחדש.'); return; }
+  if (ms2 > ms1 / 3) { Logger.log('⚠️ המטמון נשמר אך לא הביא שיפור משמעותי'); return; }
+  Logger.log('✅ המטמון עובד – פי ' + Math.max(1, Math.round(ms1 / Math.max(ms2, 1))) + ' מהר יותר');
+}
+
 function pad_(v, n) { let t = String(v); while (t.length < n) t += ' '; return t; }
 
 function testApiSpeed() {
@@ -266,6 +295,8 @@ function apiBuildData_() {
   const reactions = apiReactions_(ss);
   const contractors = apiContractors_(ss);
   const contractorMsgs = apiContractorMsgs_(ss);
+  const projects = apiProjects_(ss);
+  const projectStages = apiProjectStages_(ss);
 
   // קישור לפי שם מקווה מנורמל
   const ids = {};
@@ -289,6 +320,7 @@ function apiBuildData_() {
     },
     mikvaot: mikvaot, actions: actions, inspections: inspections, tasks: tasks, plugs: plugs, whatsapp: whatsapp, messages: messages, work: work, media: media,
     groups: groups, reactions: reactions, contractors: contractors, contractorMsgs: contractorMsgs,
+    projects: projects, projectStages: projectStages,
     users: authPublicUsers_(ss), perms: authPerms_(ss),
   };
 }

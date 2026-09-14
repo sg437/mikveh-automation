@@ -345,6 +345,8 @@
       if (window.MikvehTalk) MikvehTalk.renderView(parts[1] || ''); $('#view-talk').classList.add('on');
     } else if (view === 'work') {
       if (window.MikvehWork) MikvehWork.renderView(parts[1] || ''); $('#view-work').classList.add('on');
+    } else if (view === 'projects') {
+      if (window.MikvehProjects) MikvehProjects.renderView(); $('#view-projects').classList.add('on');
     } else if (view === 'users') {
       if (window.MikvehAuth) MikvehAuth.renderUsersView(); $('#view-users').classList.add('on');
     } else if (view === 'settings') {
@@ -499,6 +501,7 @@
     const tabs = [
       ['details', 'פרטים'], ['otzarot', 'אוצרות ומאגר'], ['history', 'היסטוריית פעולות', acts.length],
       ['inspections', 'דוחות פיקוח', ins.length], ['tasks', 'משימות', tasks.length + plugs.length + (window.MikvehWork ? MikvehWork.forMikveh(m.id).length : 0)],
+      ['projects', 'פרויקטים', window.MikvehProjects ? MikvehProjects.forMikveh(m.id).length : 0],
       ['talk', 'דיון', (S.data.messages || []).filter((x) => x.mikvehId === m.id).length], ['photos', 'מדיה', window.MikvehMedia ? MikvehMedia.photosCount(m) : 0],
       ['contractor', 'קבלן', window.MikvehContractor ? MikvehContractor.count(m) : 0], ['whatsapp', 'דיווחי וואטסאפ', (S.wa[m.id] || []).length],
     ];
@@ -513,6 +516,7 @@
       tasks: (window.MikvehWork ? MikvehWork.renderCardPane(m) : '') + renderCardTasks(tasks, plugs),
       talk: window.MikvehTalk ? MikvehTalk.renderPane(m) : '',
       photos: window.MikvehMedia ? MikvehMedia.photosPane(m) : '',
+      projects: window.MikvehProjects ? MikvehProjects.cardPane(m) : '',
       contractor: window.MikvehContractor ? MikvehContractor.pane(m) : '',
       whatsapp: renderWhatsapp(S.wa[m.id] || [], m),
     };
@@ -528,6 +532,7 @@
     loadInspectionSections(m, root);
     if (window.MikvehTalk) MikvehTalk.bindPane(root, m);
     if (window.MikvehWork) MikvehWork.bindCardPane(root, m);
+    if (window.MikvehProjects) MikvehProjects.bindCardPane(root, m);
     if (window.MikvehContractor) MikvehContractor.bind(root, m);
     root.querySelectorAll('[data-export]').forEach((b) => b.addEventListener('click', () => {
       if (b.dataset.export === 'history') exportActions(acts, m.name);
@@ -1225,6 +1230,8 @@
     data.contractors = data.contractors || []; data.contractorMsgs = data.contractorMsgs || [];
     $('#navCountTalk').textContent = data.messages.length;
     $('#navCountWork').textContent = data.work.filter((w) => w.status !== 'done').length;
+    data.projects = data.projects || []; data.projectStages = data.projectStages || {};
+    if (window.MikvehProjects) MikvehProjects.refreshNav();
     initList();
     initReport();
     initUser();

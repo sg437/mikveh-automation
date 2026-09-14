@@ -37,6 +37,22 @@
   .msg.sys .swi .swn{flex:1;font-weight:700}
   .msg.sys .swi small{color:var(--muted)}
   .msg.sys .swh{margin-top:4px;font-size:.75rem;color:var(--muted);text-align:center}
+  .phead h3{font-size:1.02rem;margin-bottom:3px}
+  .phead .pmeta{font-size:.85rem;color:var(--muted);margin-bottom:3px}
+  .pprog{display:flex;align-items:center;gap:8px;margin:7px 0 4px}
+  .pbar{flex:1;height:8px;background:var(--gray-soft);border-radius:99px;overflow:hidden}
+  .pbar span{display:block;height:100%;background:var(--ok);border-radius:99px}
+  .pstages{display:flex;flex-direction:column;gap:7px;margin-top:10px}
+  .pstage{border:1px solid var(--line);border-left:4px solid var(--line);border-radius:8px;padding:8px 10px;background:var(--card)}
+  .pstage.ok{border-left-color:var(--ok);background:var(--ok-soft)}
+  .pstage.warn{border-left-color:var(--warn);background:var(--warn-soft)}
+  .pstage.bad{border-left-color:var(--bad);background:var(--bad-soft)}
+  .pstage.crit{border-left-width:6px;border-left-style:double}
+  .pstage .ps-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px;font-size:.92rem}
+  .pstage .ps-row{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+  .pstage .ps-row select,.pstage .ps-row input[type=date]{padding:4px 7px;border:1px solid var(--line);border-radius:6px;background:var(--card)}
+  .pstage .ps-row input[type=text]{flex:1;min-width:140px;padding:4px 7px;border:1px solid var(--line);border-radius:6px;background:var(--card)}
+  .pstage .ps-by{display:block;margin-top:4px;color:var(--muted);font-size:.78rem}
   .btn.danger{color:var(--bad);border-color:var(--bad)}
   .btn.danger:hover{background:var(--bad-soft)}
   .cell-input{width:120px;max-width:100%;padding:4px 7px;border:1px solid var(--line);border-radius:6px;background:var(--card);direction:ltr;text-align:start}
@@ -479,6 +495,7 @@
     <a href="#/list" data-view="list"><span class="ic">🕍</span><span class="t">מקוואות</span><span class="n" id="navCountList"></span></a>
     <a href="#/plan" data-view="plan"><span class="ic">📅</span><span class="t">תכנון עבודה</span><span class="n" id="navCountPlan"></span></a>
     <a href="#/work" data-view="work"><span class="ic">✋</span><span class="t">חלוקת עבודה</span><span class="n" id="navCountWork"></span></a>
+    <a href="#/projects" data-view="projects"><span class="ic">🏗️</span><span class="t">פרויקטים</span><span class="n" id="navCountProjects"></span></a>
     <a href="#/talk" data-view="talk"><span class="ic">💬</span><span class="t">דיונים</span><span class="n" id="navCountTalk"></span></a>
     <a href="#/tasks" data-view="tasks"><span class="ic">⚠️</span><span class="t">משימות פתוחות</span><span class="n" id="navCountTasks"></span></a>
     <a href="#/whatsapp" data-view="whatsapp"><span class="ic">📱</span><span class="t">דיווחי וואטסאפ</span><span class="n" id="navCountWa"></span></a>
@@ -587,6 +604,7 @@
 
   <!-- ===== חלוקת עבודה ===== -->
   <section class="view" id="view-work"></section>
+  <section class="view" id="view-projects"></section>
 
   <!-- ===== ניהול משתמשים ===== -->
   <section class="view" id="view-users"></section>
@@ -679,6 +697,7 @@
 <script src="edit.js"></script>
 <script src="setup.js"></script>
 <script src="perms.js"></script>
+<script src="projects.js"></script>
 <script src="contractor.js"></script>
 <script src="auth.js"></script>
 </body>

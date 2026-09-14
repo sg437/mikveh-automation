@@ -6,7 +6,7 @@
 const CACHE = 'mikveh-talk-v1';
 const FILES = ['./', './index.html', './manifest.json',
   '../app.js', '../forms.js', '../talk.js', '../work.js', '../media.js', '../edit.js', '../setup.js',
-  '../perms.js', '../contractor.js', '../auth.js', '../config.js', '../hebdate.js',
+  '../perms.js', '../projects.js', '../contractor.js', '../auth.js', '../config.js', '../hebdate.js',
   '../talk-icon-192.png', '../talk-icon-512.png', '../talk-icon-maskable-512.png'];
 
 self.addEventListener('install', (e) => {
