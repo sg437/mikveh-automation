@@ -56,7 +56,8 @@
       ['קליטת פעולות מהוואטסאפ', p.waAutoActions ? OK : NO('WA_AUTO_ACTIONS=1')],
       ['התראות בוואטסאפ', p.notifyWhatsapp && p.greenApi ? OK : NO('NOTIFY_WHATSAPP=1', '+ חיבור Green API')],
       ['תזכורות תעודה', p.alertChat ? OK : NO('ALERT_CHAT_ID')],
-      ['תפקיד ברירת מחדל', p.defaultRole ? '<b>' + esc(p.defaultRole) + '</b>' : 'צופה (ברירת מחדל)'],
+      ['תפקיד למשתמש חדש', p.defaultRole ? '<b>' + esc(p.defaultRole) + '</b>' :
+        '<b>מפקח</b> <span class="badge warn">כותב</span> <small>– להגדיר <code dir="ltr">DEFAULT_ROLE=צופה</code> כדי שנכנס חדש לא יוכל לכתוב</small>'],
     ];
     return '<div class="dl">' + rows.map((r) => '<div><dt>' + r[0] + '</dt><dd>' + r[1] + '</dd></div>').join('') + '</div>';
   }
