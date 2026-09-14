@@ -72,6 +72,15 @@
   .pcard[open] > summary .pchev{transform:rotate(180deg)}
   .pcard .pbody{padding:10px 16px 14px}
   .pcard .pbody .pstages{margin-top:0}
+  .pcard .pbody > .panel-tools{margin-bottom:10px}
+  /* אישור סיום: הרגע שבו המקווה נכנס לשירות בבסיס הנתונים */
+  .pdone{margin-top:12px;padding:10px 12px;border:1px dashed var(--line);border-radius:8px;
+    display:flex;flex-direction:column;gap:6px;align-items:flex-start;background:var(--gray-soft)}
+  .pdone b{font-size:.92rem;color:var(--brand)}
+  .pdone small{color:var(--muted);font-size:.82rem}
+  .pdone.ready{border-style:solid;border-color:var(--ok);background:var(--ok-soft)}
+  .pdone.ok{border-style:solid;border-color:var(--ok);background:var(--ok-soft)}
+  .pdone .btn[disabled]{opacity:.5;cursor:not-allowed}
   .btn.danger{color:var(--bad);border-color:var(--bad)}
   .btn.danger:hover{background:var(--bad-soft)}
   .cell-input{width:120px;max-width:100%;padding:4px 7px;border:1px solid var(--line);border-radius:6px;background:var(--card);direction:ltr;text-align:start}

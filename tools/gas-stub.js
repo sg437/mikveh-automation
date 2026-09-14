@@ -29,6 +29,27 @@ function makeSheet(name, rtl) {
           return out;
         },
         getValue: () => { const row = rows[r - 1] || []; return row[c - 1] === undefined ? '' : row[c - 1]; },
+        // חיפוש טקסט בטווח (isDuplicate_ מחפש כך idMessage בתור הנכנס)
+        createTextFinder: (text) => {
+          const finder = {
+            matchEntireCell: () => finder,
+            matchCase: () => finder,
+            matchFormulaText: () => finder,
+            ignoreDiacritics: () => finder,
+          };
+          finder.findNext = () => {
+            for (let i = 0; i < nr; i++) {
+              const row = rows[r - 1 + i] || [];
+              for (let j = 0; j < nc; j++) {
+                if (String(row[c - 1 + j] === undefined ? '' : row[c - 1 + j]) === String(text)) {
+                  return { getRow: () => r + i, getColumn: () => c + j };
+                }
+              }
+            }
+            return null;
+          };
+          return finder;
+        },
         setValue: (v) => { while (rows.length < r) rows.push([]); const row = rows[r - 1]; while (row.length < c) row.push(''); row[c - 1] = v; },
         setValues: (vals) => {
           vals.forEach((line, i) => {
