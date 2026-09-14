@@ -24,8 +24,18 @@
   const STAGE_CLASS = { 'ממתין': '', 'בביצוע': 'warn', 'אושר': 'ok', 'נדרש תיקון': 'bad' };
 
   let filter = 'active';
+  /** מה המשתמש פתח או סגר ביד. נשמר כדי שסינון או רענון לא ישנו את המצב. */
+  const openState = new Map();
 
   function all() { return MK().S.data.projects || []; }
+  /** משתמשי המערכת הפעילים – רק מהם אפשר לבחור מפקח */
+  function staff() { return (MK().S.data.users || []).filter((u) => u.name && u.active !== false); }
+  function isAdmin() { const u = MK().getUser(); return !!(u && u.role === 'מנהל'); }
+  function options(names, val) {
+    const list = names.slice();
+    if (val && list.indexOf(val) < 0) list.unshift(val);
+    return list.map((n) => '<option' + (n === val ? ' selected' : '') + '>' + esc(n) + '</option>').join('');
+  }
   function stagesOf(id) { return (MK().S.data.projectStages || {})[id] || {}; }
   function forMikveh(mikvehId) { return all().filter((p) => p.mikvehId === mikvehId); }
 
@@ -44,9 +54,14 @@
 
   function checklist(p, editable) {
     const st = stagesOf(p.id);
+    // מנהל רשאי לרשום שלב על שם מפקח אחר. לכל שאר התפקידים השלב נרשם על שם
+    // מי שמחובר, ולכן אין להם את הבחירה הזו.
+    const pickBy = editable && isAdmin();
+    const names = pickBy ? staff().map((u) => u.name) : [];
     return '<div class="pstages">' + STAGES.map((s) => {
       const cur = st[s.key] || { status: 'ממתין' };
       const K = MK();
+      const by = cur.by || (K.getUser().name || '');
       return '<div class="pstage ' + esc(STAGE_CLASS[cur.status] || '') + (s.critical ? ' crit' : '') + '" data-stage="' + esc(s.key) + '">' +
         '<div class="ps-head"><b>' + esc(s.label) + '</b>' +
         (s.critical ? '<span class="badge warn">נקודת אל-חזור</span>' : '') + '</div>' +
@@ -54,14 +69,35 @@
           (editable
             ? '<select data-f="status">' + STAGE_STATUS.map((x) => '<option' + (x === cur.status ? ' selected' : '') + '>' + x + '</option>').join('') + '</select>' +
               '<input type="date" data-f="date" value="' + esc((cur.date || '').slice(0, 10)) + '">' +
+              (pickBy ? '<label class="ps-who">מפקח<select data-f="by">' + options(names, by) + '</select></label>' : '') +
               '<input type="text" data-f="note" placeholder="הערה" value="' + esc(cur.note || '') + '">'
             : '<span class="badge">' + esc(cur.status) + '</span>' +
               (cur.date ? ' <small>' + esc(K.hebOf(cur.date)) + '</small>' : '') +
               (cur.note ? ' <small>· ' + esc(cur.note) + '</small>' : '')) +
         '</div>' +
-        (cur.by ? '<small class="ps-by">' + esc(cur.by) + '</small>' : '') +
+        (cur.by && !pickBy ? '<small class="ps-by">' + esc(cur.by) + '</small>' : '') +
         '</div>';
     }).join('') + '</div>';
+  }
+
+  /** כרטיס פרויקט נפתח: הכותרת תמיד גלויה, הצ'ק-ליסט רק כשפותחים אותו. */
+  function card(p, open) {
+    return '<details class="panel pcard" data-project="' + esc(p.id) + '"' + (open ? ' open' : '') + '>' +
+      '<summary>' + head(p) + '<span class="pchev">▾</span></summary>' +
+      '<div class="pbody">' + checklist(p, true) + '</div></details>';
+  }
+
+  /** פרויקט יחיד נפתח מעצמו; ברשימה ארוכה הכל סגור עד שפותחים. */
+  function cards(list) {
+    return list.map((p) => card(p, openState.has(p.id) ? openState.get(p.id) : list.length === 1)).join('');
+  }
+
+  function bindCards(root) {
+    root.querySelectorAll('.pcard').forEach((d) => {
+      d.addEventListener('toggle', () => openState.set(d.dataset.project, d.open));
+      // קישור לכרטיס המקווה שיושב בתוך ה-summary אינו אמור גם לפתוח את הכרטיס
+      d.querySelectorAll('summary a').forEach((a) => a.addEventListener('click', (e) => e.stopPropagation()));
+    });
   }
 
   function head(p) {
@@ -88,13 +124,13 @@
         '<div class="empty">אין פרויקט פתוח למקווה זה.</div>' +
         '<div class="panel-tools"><button class="btn primary small" id="pNewForMikveh">פתיחת פרויקט</button></div></div>';
     }
-    return list.map((p) => '<div class="panel" data-project="' + esc(p.id) + '">' + head(p) +
-      checklist(p, true) + '</div>').join('');
+    return cards(list);
   }
 
   function bindCardPane(root, m) {
     const btn = root.querySelector('#pNewForMikveh');
     if (btn) btn.addEventListener('click', () => openForm({ mikveh: m.name, place: m.place || '' }));
+    bindCards(root);
     bindStages(root);
   }
 
@@ -114,6 +150,13 @@
           (map[pid] = map[pid] || {})[res.stage] = res.record;
           const def = STAGES.find((s) => s.key === res.stage) || {};
           box.className = 'pstage ' + (STAGE_CLASS[res.record.status] || '') + (def.critical ? ' crit' : '');
+          // השרת מאשר על שם מי נרשם השלב בפועל (ומנקה את השם כשחוזרים ל"ממתין")
+          const bySel = box.querySelector('[data-f=by]');
+          if (bySel) {
+            const val = res.record.by || '';
+            if (val && !Array.from(bySel.options).some((o) => o.value === val)) bySel.add(new Option(val, val));
+            bySel.value = val;
+          }
           el.disabled = false;
           K.toast('השלב עודכן');
           refreshNav();
@@ -123,48 +166,57 @@
   }
 
   // ---------- טופס פתיחה ----------
+  /** למנהל – בחירה מתוך משתמשי המערכת; לשאר – השם שלהם, כמו עד היום. */
+  function supervisorField(me) {
+    const names = isAdmin() ? staff().map((u) => u.name) : [];
+    if (!names.length) return '<input id="pSup" type="text" value="' + esc(me) + '">';
+    return '<select id="pSup">' + options(names, me) + '</select>';
+  }
+
   function openForm(pre) {
     const K = MK();
     if (!K.requireUser()) return;
-    const box = K.$('#editModal');
-    if (!box) return;
-    box.hidden = false;
-    box.innerHTML = '<div class="modal-in"><h3>פתיחת פרויקט</h3>' +
-      '<form id="pForm" class="rform"><div class="fgrid">' +
+    const body = K.$('#editBody');
+    if (!body) return;
+    // #editModal הוא הרקע הכהה בלבד; המבנה הפנימי (modal / modal-head / modal-body)
+    // קבוע ב-index.html, ודריסתו משאירה את הרקע בלי החלון הלבן.
+    K.$('#editTitle').textContent = 'פתיחת פרויקט';
+    body.innerHTML = '<form id="pForm" class="rform" novalidate><div class="fgrid">' +
       '<div class="ff wide"><label>שם המקווה <span class="req">*</span></label>' +
         '<input id="pMikveh" type="text" required value="' + esc((pre && pre.mikveh) || '') + '">' +
         '<small class="hint">אפשר גם מקווה שעדיין אינו בבסיס הנתונים — פרויקט בנייה נפתח לפניו.</small></div>' +
       '<div class="ff"><label>יישוב</label><input id="pPlace" type="text" value="' + esc((pre && pre.place) || '') + '"></div>' +
       '<div class="ff"><label>סוג</label><select id="pType">' + TYPES.map((t) => '<option>' + t + '</option>').join('') + '</select></div>' +
-      '<div class="ff"><label>מפקח אחראי</label><input id="pSup" type="text" value="' + esc(K.getUser().name || '') + '"></div>' +
+      '<div class="ff"><label>מפקח אחראי</label>' + supervisorField(K.getUser().name || '') + '</div>' +
       '<div class="ff"><label>קבלן</label><input id="pCon" type="text"></div>' +
       '<div class="ff"><label>תאריך התחלה</label><input id="pStart" type="date"></div>' +
       '<div class="ff"><label>סיום משוער</label><input id="pTarget" type="date"></div>' +
       '<div class="ff wide"><label>הערה</label><textarea id="pNote" rows="2"></textarea></div>' +
       '</div><div class="factions"><button class="btn primary" type="submit">פתיחה</button>' +
       '<button class="btn" type="button" id="pCancel">ביטול</button>' +
-      '<span class="fmsg" id="pMsg"></span></div></form></div>';
+      '<span class="fmsg" id="pMsg"></span></div></form>';
 
-    box.querySelector('#pCancel').addEventListener('click', () => { box.hidden = true; });
-    box.querySelector('#pForm').addEventListener('submit', (e) => {
+    K.$('#editModal').hidden = false;
+    K.$('#pCancel').addEventListener('click', () => { K.$('#editModal').hidden = true; });
+    K.$('#pForm').addEventListener('submit', (e) => {
       e.preventDefault();
-      const msg = box.querySelector('#pMsg');
+      const msg = K.$('#pMsg');
       const data = {
-        mikveh: box.querySelector('#pMikveh').value.trim(),
-        place: box.querySelector('#pPlace').value.trim(),
-        type: box.querySelector('#pType').value,
-        supervisor: box.querySelector('#pSup').value.trim(),
-        contractor: box.querySelector('#pCon').value.trim(),
-        startDate: box.querySelector('#pStart').value,
-        targetDate: box.querySelector('#pTarget').value,
-        note: box.querySelector('#pNote').value.trim(),
+        mikveh: K.$('#pMikveh').value.trim(),
+        place: K.$('#pPlace').value.trim(),
+        type: K.$('#pType').value,
+        supervisor: K.$('#pSup').value.trim(),
+        contractor: K.$('#pCon').value.trim(),
+        startDate: K.$('#pStart').value,
+        targetDate: K.$('#pTarget').value,
+        note: K.$('#pNote').value.trim(),
       };
       if (!data.mikveh) { msg.textContent = 'חסר שם מקווה'; msg.className = 'fmsg bad'; return; }
       msg.textContent = 'שומר...'; msg.className = 'fmsg';
       K.DataSource.post('addProject', data).then((res) => {
         (K.S.data.projects = K.S.data.projects || []).unshift(res.record);
         if (res.message) K.S.data.messages.push(res.message);
-        box.hidden = true;
+        K.$('#editModal').hidden = true;
         K.toast('הפרויקט נפתח');
         refreshNav();
         location.hash = '#/projects';
@@ -186,11 +238,12 @@
         '</div><div class="row"><button class="btn primary" id="pNew">פתיחת פרויקט</button></div>' +
         '<div class="summary">' + (K.S.data.source === 'static' ? '<span class="badge bad">דורש חיבור חי לגיליון</span> ' : '') +
         '<b>' + list.length + '</b> פרויקטים. כל פרויקט מלווה בצ\'ק-ליסט של ' + STAGES.length + ' שלבים.</div></div>' +
-      (list.length ? list.map((p) => '<div class="panel" data-project="' + esc(p.id) + '">' + head(p) + checklist(p, true) + '</div>').join('')
+      (list.length ? cards(list)
         : '<div class="panel"><div class="empty">אין פרויקטים להצגה</div></div>');
 
     root.querySelectorAll('#pChips .chip').forEach((b) => b.addEventListener('click', () => { filter = b.dataset.chip; renderView(); }));
     root.querySelector('#pNew').addEventListener('click', () => openForm(null));
+    bindCards(root);
     bindStages(root);
   }
 

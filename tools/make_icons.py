@@ -94,20 +94,24 @@ def in_bubble(u, v):
     return False
 
 
-def make(shape, maskable=False):
+def make(shape, maskable=False, invert=False):
+    """invert: רקע זהב וצורה כחולה – לאפליקציית הדיונים, כדי ששני האייקונים
+    יהיו נבדלים במבט חטוף במגירת האפליקציות ולא רק בצורה שבתוכם."""
+    bg, fg = (ACCENT, BRAND) if invert else (BRAND, ACCENT)
+
     def sample(u, v):
         if maskable:
             # אזור בטוח: התוכן מכווץ ל-80% והרקע מכסה את כל הריבוע
             u = (u - 32.0) / 0.8 + 32.0
             v = (v - 32.0) / 0.8 + 32.0
             if shape(u, v):
-                return ACCENT + (255,)
-            return BRAND + (255,)
+                return fg + (255,)
+            return bg + (255,)
         if not in_round_rect(u, v):
             return (0, 0, 0, 0)
         if shape(u, v):
-            return ACCENT + (255,)
-        return BRAND + (255,)
+            return fg + (255,)
+        return bg + (255,)
     return sample
 
 
@@ -118,9 +122,9 @@ def main():
         ('icon-512.png', 512, make(on_wave)),
         ('icon-maskable-512.png', 512, make(on_wave, maskable=True)),
         ('apple-touch-icon.png', 180, make(on_wave, maskable=True)),
-        ('talk-icon-192.png', 192, make(in_bubble)),
-        ('talk-icon-512.png', 512, make(in_bubble)),
-        ('talk-icon-maskable-512.png', 512, make(in_bubble, maskable=True)),
+        ('talk-icon-192.png', 192, make(in_bubble, invert=True)),
+        ('talk-icon-512.png', 512, make(in_bubble, invert=True)),
+        ('talk-icon-maskable-512.png', 512, make(in_bubble, maskable=True, invert=True)),
     ]
     for name, size, sample in jobs:
         write_png(os.path.join(out, name), size, sample)
