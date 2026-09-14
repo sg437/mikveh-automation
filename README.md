@@ -116,8 +116,9 @@ python3 tools/export_excel.py "קובץ-המקוואות.xlsx" app/data.js
    האפליקציה ממשיכה לעבוד מהעותק המקומי (`data.js`) ומציגה "אין חיבור לגיליון".
 
 **מדריך הפעלה מלא, צעד אחר צעד, כולל בדיקות ותקלות נפוצות: [`docs/הפעלה.md`](docs/הפעלה.md).**
-פרסום האפליקציה כאתר נעשה אוטומטית ב-GitHub Pages (`.github/workflows/pages.yml`);
-הפעלה חד-פעמית: Settings ⟵ Pages ⟵ Source: GitHub Actions.
+פרסום האפליקציה כאתר נעשה אוטומטית ב-GitHub Pages (`.github/workflows/pages.yml`) –
+ה-Workflow מפעיל את Pages בעצמו, ואין שלב ידני. (רק אם הארגון חוסם הפעלה אוטומטית:
+Settings ⟵ Pages ⟵ Source: GitHub Actions, ואז להריץ את ה-Workflow מחדש.)
 
 ### כתיבה מהאפליקציה לגיליון (`ApiWrite.js`)
 `POST <WebApp URL>?action=...&token=...` עם גוף JSON `{ user: {name, phone}, data: {...} }`.
