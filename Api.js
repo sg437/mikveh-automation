@@ -68,6 +68,13 @@ function apiHandle_(e, action) {
     // ---- API ציבורי לאתר (בלי טוקן): רק מידע שמיועד לציבור ----
     if (action === 'public') return apiPublic_(e);
     if (action === 'whatsapp') return jsonResponse_({ whatsapp: apiWhatsapp_() });
+    if (action === 'inspections') {
+      // דוחות מלאים (עם המדורים) למקווה אחד – נטענים רק כשפותחים את הלשונית
+      const ss = apiSpreadsheet_();
+      const want = apiNorm_((e.parameter && e.parameter.mikveh) || '');
+      const all = apiInspections_(ss, true);
+      return jsonResponse_({ inspections: want ? all.filter(function (i) { return apiNorm_(i.mikveh) === want; }) : all });
+    }
     if (action === 'messages') return jsonResponse_({ messages: apiMessages_(apiSpreadsheet_(), (e.parameter && e.parameter.since) || '') });
     if (action === 'sync') {
       const ss = apiSpreadsheet_();
@@ -275,7 +282,17 @@ function apiActions_(ss) {
   return out;
 }
 
-function apiInspections_(ss) {
+/**
+ * דוחות הפיקוח.
+ *
+ * full=false (ברירת המחדל, וכך ב-?action=data): בלי המדורים. המדורים הם 79
+ * עמודות לכל דוח – כשלושה ק"ב לרשומה, וכ-1.6MB בסך הכל – והם מוצגים רק
+ * בלשונית "דוחות פיקוח" של כרטיס מקווה מסוים. לוח הבקרה, הספירות והנתונים
+ * החיים משתמשים רק ב-ts, rabbi ו-mikvehId.
+ *
+ * full=true (ב-?action=inspections&mikveh=...): עם המדורים, למקווה אחד.
+ */
+function apiInspections_(ss, full) {
   const rows = apiRows_(ss, API.SHEETS.inspections);
   const hdr = rows[0].map(function (h) { return (apiClean_(h) || '').trim(); });
   const out = [];
@@ -283,7 +300,7 @@ function apiInspections_(ss) {
     const r = rows[i];
     const ts = apiIso_(r[1]), name = apiClean_(r[0]);
     if (!ts || !name) continue;
-    const sections = API_INSPECTION_SECTIONS.map(function (s) {
+    const sections = !full ? null : API_INSPECTION_SECTIONS.map(function (s) {
       const fields = [];
       for (let c = s[2]; c < s[3] && c < r.length; c++) {
         const v = apiClean_(r[c]);
@@ -296,7 +313,7 @@ function apiInspections_(ss) {
       contact: apiClean_(r[13]), phone: apiClean_(r[14]),
       urgent: apiNum_(r[3]) || 0, needed: apiNum_(r[4]) || 0,
       reservoirEmpty: apiClean_(r[5]), zeriaReplace: apiClean_(r[6]), hashakaReplace: apiClean_(r[7]), chabadReplace: apiClean_(r[90]),
-      sections: sections, guidance: apiClean_(r[84]), address: apiClean_(r[89]),
+      sections: full ? sections : undefined, guidance: full ? apiClean_(r[84]) : null, address: apiClean_(r[89]),
       lastReplaced: { zeria: apiClean_(r[85]), hashaka: apiClean_(r[86]), reservoir: apiClean_(r[87]), chabad: apiClean_(r[88]) },
       repairs: { reservoir: apiNum_(r[92]) || 0, zeria: apiNum_(r[93]) || 0, hashaka: apiNum_(r[95]) || 0, chabad: apiNum_(r[97]) || 0, bor: apiNum_(r[99]) || 0, roof: apiNum_(r[100]) || 0 },
     });

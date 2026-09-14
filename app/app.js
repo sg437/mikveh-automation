@@ -46,6 +46,18 @@
         .then(([d, cached]) => { if (d.error) throw new Error(d.error); d.source = cached ? 'cached' : 'live'; return d; })
         .catch((err) => { console.warn('טעינה מהגיליון נכשלה, עובדים מהעותק המקומי:', err); return fallback(err); });
     },
+    /** קריאה ממוקדת מהשרת (נתונים שלא מגיעים בטעינה הראשית). */
+    get: function (action, params) {
+      let url = this.url(action);
+      if (!url) return Promise.reject(new Error('אין חיבור לגיליון'));
+      Object.keys(params || {}).forEach(function (k) {
+        if (params[k] !== undefined && params[k] !== null) url += '&' + k + '=' + encodeURIComponent(params[k]);
+      });
+      return fetch(url, { redirect: 'follow', cache: 'no-store' })
+        .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+        .then(function (d) { if (d.error) throw new Error(d.error); return d; });
+    },
+
     /** כתיבה לגיליון דרך ApiWrite.js. בלי חיבור – דיווחים והודעות נשמרים במכשיר ונשלחים אחר כך. */
     post: function (action, data) {
       const token = window.MikvehAuth ? MikvehAuth.token() : '';
@@ -505,6 +517,7 @@
     }));
     $('#cardReport').addEventListener('click', () => openReport(m));
     $('#cardEdit').addEventListener('click', () => { if (window.MikvehEdit) MikvehEdit.open(m); });
+    loadInspectionSections(m, root);
     if (window.MikvehTalk) MikvehTalk.bindPane(root, m);
     if (window.MikvehWork) MikvehWork.bindCardPane(root, m);
     if (window.MikvehContractor) MikvehContractor.bind(root, m);
@@ -587,8 +600,36 @@
     return '<div class="panel"><h3>יומן פעולות</h3><div class="panel-tools"><button class="btn small" type="button" data-export="history">⬇ ייצוא לאקסל</button></div><ul class="timeline">' + items + '</ul></div>';
   }
 
+  /**
+   * הפירוט המלא של דוח פיקוח (המדורים) אינו מגיע בטעינה הראשית – הוא כבד,
+   * ונחוץ רק כאן. נטען למקווה אחד ברגע שהכרטיס נפתח.
+   */
+  function loadInspectionSections(m, root) {
+    const list = S.insp[m.id] || [];
+    if (!list.length || list.some((i) => i.sections)) return;
+    DataSource.get('inspections', { mikveh: m.name }).then((res) => {
+      const got = res && res.inspections ? res.inspections : [];
+      if (!got.length) return;
+      const byTs = {};
+      got.forEach((g) => { byTs[g.ts] = g; });
+      list.forEach((i) => { const g = byTs[i.ts]; if (g) { i.sections = g.sections; i.guidance = g.guidance; } });
+      const pane = root.querySelector('[data-pane="inspections"]');
+      if (pane) {
+        pane.innerHTML = renderInspections(list);
+        pane.querySelectorAll('[data-export]').forEach((b) => b.addEventListener('click', () => exportInspections(list, m.name)));
+      }
+    }).catch(() => {
+      const pane = root.querySelector('[data-pane="inspections"]');
+      if (pane) pane.innerHTML = '<div class="panel"><div class="empty">לא ניתן לטעון את פירוט הדוחות. בדוק את החיבור.</div></div>';
+    });
+  }
+
   function renderInspections(ins) {
     if (!ins.length) return '<div class="panel"><div class="empty">אין דוחות פיקוח מפורטים למקווה זה</div></div>';
+    if (!ins.some((i) => i.sections)) {
+      return '<div class="panel"><h3>דוחות פיקוח הלכתי</h3>' +
+        '<div class="empty">טוען את פירוט ' + ins.length + ' הדוחות...</div></div>';
+    }
     return '<div class="panel"><h3>דוחות פיקוח הלכתי</h3><div class="panel-tools"><button class="btn small" type="button" data-export="inspections">⬇ ייצוא לאקסל</button></div>' + ins.map((i, idx) => {
       const secs = (i.sections || []).filter((s) => s.fields.length).map((s) =>
         '<div class="sec"><h4>' + esc(s.title) + '<span>' + secBadges(s) + '</span></h4>' +
