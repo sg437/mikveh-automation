@@ -5,7 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>מערכת כשרות המקוואות</title>
 <link rel="manifest" href="manifest.json" id="appManifest">
-<script>if(/[?&]app=talk/.test(location.search)){document.getElementById("appManifest").href="talk-manifest.json";document.addEventListener("DOMContentLoaded",function(){var i=document.querySelector('link[rel="apple-touch-icon"]');if(i)i.href="talk-icon-192.png";});}</script>
+<!-- ?app=talk הוא קיצור ישן. הוא הפנה למניפסט באותו scope של האפליקציה הראשית,
+     וכרום מזהה אפליקציה לפי scope – ולכן לא היה מציע להתקין אותה בנפרד לעולם.
+     הפניה לאפליקציית הדיונים האמיתית, שיושבת בתיקייה ובscope משלה. -->
+<script>if(/[?&]app=talk/.test(location.search)){location.replace("talk/"+location.hash);}</script>
 <meta name="theme-color" content="#123C5A">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="מקוואות">
