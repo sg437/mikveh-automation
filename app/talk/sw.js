@@ -3,7 +3,7 @@
    לצד "מקוואות", במקום לראות בה את אותה אפליקציה. הקבצים המשותפים
    נטענים מהתיקייה שמעל (../), ולכן גם הם נשמרים כאן במטמון.
    להעלות גרסה בכל שינוי. data.js (~3.6MB) אינו ברשימה – הוא רק עותק גיבוי. */
-const CACHE = 'mikveh-talk-v11';
+const CACHE = 'mikveh-talk-v12';
 const FILES = ['./', './index.html', './manifest.json',
   '../app.js', '../forms.js', '../talk.js', '../work.js', '../media.js', '../edit.js', '../setup.js',
   '../perms.js', '../projects.js', '../contractor.js', '../auth.js', '../config.js', '../hebdate.js',
@@ -42,7 +42,11 @@ self.addEventListener('fetch', (e) => {
 
   if (isShell) {
     e.respondWith(
-      caches.match(e.request).then((cached) => {
+      // { cacheName } הכרחי: caches.match בלי זה סורק את כל המטמונים של האתר
+      // ומחזיר את ההתאמה הראשונה. הקבצים המשותפים (app.js, perms.js, auth.js...)
+      // שמורים גם במטמון של אפליקציית הדיונים, וזה הגיש אותם משם — כולל
+      // גרסאות ישנות, כי המטמון ההוא מתעדכן רק כשפותחים את הדיונים.
+      caches.match(e.request, { cacheName: CACHE }).then((cached) => {
         const net = fetch(e.request).then((res) => {
           if (res.ok) caches.open(CACHE).then((c) => c.put(e.request, res.clone())).catch(() => {});
           return res;
@@ -62,7 +66,7 @@ self.addEventListener('fetch', (e) => {
         caches.open(DATA_CACHE).then((c) => c.put(e.request, copy)).catch(() => {});
       }
       return res;
-    }).catch(() => caches.match(e.request).then((cached) => {
+    }).catch(() => caches.match(e.request, { cacheName: DATA_CACHE }).then((cached) => {
       if (!cached) return Response.error();
       const headers = new Headers(cached.headers);
       headers.set('X-From-Cache', '1');

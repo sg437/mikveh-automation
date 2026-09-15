@@ -1,7 +1,7 @@
 /* Service worker: מטמון של קבצי האפליקציה לעבודה לא מקוונת. להעלות גרסה בכל שינוי.
    data.js (~3.6MB) אינו ברשימה בכוונה: הוא רק עותק גיבוי, והכללתו גרמה להורדה
    מחדש של 3.6MB בכל העלאת גרסה. הוא נכנס למטמון לבד אם וכאשר הוא נטען. */
-const CACHE = 'mikveh-app-v43';
+const CACHE = 'mikveh-app-v44';
 /* התשובה מהגיליון נשמרת במטמון נפרד, שאינו נמחק בהעלאת גרסה: האפליקציה
    מציגה אותו מיד בפתיחה, לפני שהרשת עונה, ולא היה טעם שהעלאת גרסה תחזיר
    כל אחד להמתנה מלאה בפתיחה שאחריה. */
@@ -58,7 +58,11 @@ self.addEventListener('fetch', (e) => {
 
   if (isShell) {
     e.respondWith(
-      caches.match(e.request).then((cached) => {
+      // { cacheName } הכרחי: caches.match בלי זה סורק את כל המטמונים של האתר
+      // ומחזיר את ההתאמה הראשונה. הקבצים המשותפים (app.js, perms.js, auth.js...)
+      // שמורים גם במטמון של אפליקציית הדיונים, וזה הגיש אותם משם — כולל
+      // גרסאות ישנות, כי המטמון ההוא מתעדכן רק כשפותחים את הדיונים.
+      caches.match(e.request, { cacheName: CACHE }).then((cached) => {
         // גם כאן: בלי no-cache הרענון יכול לכתוב בחזרה את אותו קובץ ישן
         const fresh = e.request.mode === 'navigate' ? e.request
           : new Request(e.request.url, { cache: 'no-cache', credentials: 'same-origin' });
@@ -81,7 +85,7 @@ self.addEventListener('fetch', (e) => {
         caches.open(DATA_CACHE).then((c) => c.put(e.request, copy)).catch(() => {});
       }
       return res;
-    }).catch(() => caches.match(e.request).then((cached) => {
+    }).catch(() => caches.match(e.request, { cacheName: DATA_CACHE }).then((cached) => {
       if (!cached) return Response.error();
       return fromCache(cached);
     }))
