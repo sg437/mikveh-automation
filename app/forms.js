@@ -211,12 +211,33 @@
         root.querySelector('#fFill').style.width = (total ? Math.round((filled / total) * 100) : 0) + '%';
       };
       root.querySelector('#rmForm').addEventListener('change', paintProg);
+      // הכותרת של המודאל דביקה, ובטלפון גם פס המדורים נדבק מתחתיה. שתיהן נמדדות
+      // בפועל ולא מוערכות: כותרת שנשברת לשתי שורות משנה את הגובה.
+      const scroller = root.closest('.modal');
+      const stickH = () => {
+        const head = scroller && scroller.querySelector('.modal-head');
+        const headH = head ? head.offsetHeight : 0;
+        if (scroller) scroller.style.setProperty('--modal-head-h', headH + 'px');
+        // מעל 901px הפס יושב בעמודה צדדית ואינו תופס את הרצועה העליונה
+        const wide = window.matchMedia('(min-width:901px)').matches;
+        return headH + (wide ? 0 : nav.offsetHeight);
+      };
+      stickH();
+      window.addEventListener('resize', stickH);
       nav.addEventListener('click', (e) => {
         const a = e.target.closest('a[data-sec]'); if (!a) return;
         e.preventDefault();
         nav.querySelectorAll('a').forEach((x) => x.classList.toggle('on', x === a));
+        // המדור הנבחר יכול להיות מחוץ לפס הנגלל — מביאים אותו למרכזו.
+        // קודם הפס ואז המודאל, כדי שהגלילה האנכית המפורשת למטה תגבר.
+        a.scrollIntoView({ block: 'nearest', inline: 'center' });
         const d = root.querySelector('#fsec' + a.dataset.sec);
-        if (d) { d.open = true; d.scrollIntoView({ block: 'start', behavior: 'smooth' }); }
+        if (!d) return;
+        d.open = true;
+        if (!scroller) { d.scrollIntoView({ block: 'start', behavior: 'smooth' }); return; }
+        const y = scroller.scrollTop + d.getBoundingClientRect().top
+          - scroller.getBoundingClientRect().top - stickH() - 8;
+        scroller.scrollTo({ top: Math.max(0, y), behavior: 'smooth' });
       });
       root._paintProg = paintProg;
       paintProg();
