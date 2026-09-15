@@ -323,10 +323,11 @@ function workPollSummary(force) {
   const now = new Date();
 
   values.forEach(function (row, i) {
-    if (String(row[9] || WORK_POLL.OPEN) !== WORK_POLL.OPEN) return;
+    // גם סקר שנסגר נבדק: אם מישהו שחרר משימה, הוא חוזר לחיים ונשלח סיכום מעודכן.
+    const wasClosed = String(row[9] || WORK_POLL.OPEN) !== WORK_POLL.OPEN;
     const opened = parseStamp_(row[1]) || now;
     if ((now - opened) / 86400000 > WORK_POLL.MAX_AGE_DAYS) {
-      sh.getRange(i + 2, 10).setValue(WORK_POLL.CLOSED);
+      if (!wasClosed) sh.getRange(i + 2, 10).setValue(WORK_POLL.CLOSED);
       return;
     }
     const updated = parseStamp_(row[7]) || opened;
@@ -345,23 +346,29 @@ function workPollSummary(force) {
     if (!taken.length && !open.length) {
       // המשימות של הסקר נמחקו מלשונית "שיבוצים" אחרי שהוא נשלח. הסקר נסגר —
       // ונרשם ביומן הסקרים ולא בלשונית "שגיאות", שמזעיקה התראה לטלפון על כל שורה.
-      workPollLog_(ss, null, String(row[0]), String(row[3] || ''), 'הסקר נסגר',
-        'המשימות של הסקר אינן בלשונית "' + WRITE.WORK_SHEET + '" — נמחקו אחרי שהסקר נשלח');
-      sh.getRange(i + 2, 10).setValue(WORK_POLL.CLOSED);
+      if (!wasClosed) {
+        workPollLog_(ss, null, String(row[0]), String(row[3] || ''), 'הסקר נסגר',
+          'המשימות של הסקר אינן בלשונית "' + WRITE.WORK_SHEET + '" — נמחקו אחרי שהסקר נשלח');
+        sh.getRange(i + 2, 10).setValue(WORK_POLL.CLOSED);
+      }
       return;
     }
+    // סקר סגור שהכל בו עדיין מחולק — אין מה לעדכן
+    if (!force && wasClosed && !open.length) return;
 
     const stamp = taken.join('|') + '#' + open.join('|');
     if (!force && stamp === String(row[8] || '')) return; // אין מה לעדכן מאז הסיכום הקודם
 
     let text = '📊 סיכום — ' + String(row[3] || 'תכנון עבודה') + '\n';
     text += '\n✅ נלקחו (' + taken.length + '):\n' + (taken.length ? taken.join('\n') : '—');
-    text += '\n\n⬜ עדיין פנויים (' + open.length + '):\n' + (open.length ? open.join('\n') : '—');
+    text += '\n\n' + (wasClosed && open.length ? '⬜ שוחררו וממתינים (' : '⬜ עדיין פנויים (') +
+      open.length + '):\n' + (open.length ? open.join('\n') : '—');
     text += open.length ? '\n\nאפשר לסמן בסקר למעלה, או במערכת ➜ חלוקת עבודה.' : '\n\nהכל חולק. תודה!';
 
     if (workPollSay_(text, String(row[0]))) {
       sh.getRange(i + 2, 9).setValue(stamp);
-      if (!open.length) sh.getRange(i + 2, 10).setValue(WORK_POLL.CLOSED);
+      // נסגר כשהכל חולק, ונפתח מחדש ברגע שמשהו שוחרר
+      sh.getRange(i + 2, 10).setValue(open.length ? WORK_POLL.OPEN : WORK_POLL.CLOSED);
       Logger.log('נשלח סיכום לסקר: ' + String(row[3] || ''));
     } else {
       Logger.log('שליחת הסיכום נכשלה לסקר: ' + String(row[3] || ''));

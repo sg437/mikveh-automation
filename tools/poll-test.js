@@ -156,6 +156,21 @@ box.workPollSummary();
 check('נשלח סיכום מסכם', box.sent.length === 1 && /הכל חולק/.test(box.sent[0].body.message));
 check('הסקר נסגר', rows(box, 'סקרי עבודה')[1][9] === 'הסתיים');
 
+console.log('\n— שחרור אחרי שהכל חולק: הסקר נפתח מחדש ונשלח סיכום —');
+check('הסקר אכן סגור עכשיו', rows(box, 'סקרי עבודה')[1][9] === 'הסתיים');
+const freed = rows(box, 'שיבוצים').filter((r) => r[0] && r[4] === 'taken')[0];
+freed[4] = 'open'; freed[5] = ''; // מישהו שחרר — מהסקר או מהאפליקציה
+rows(box, 'סקרי עבודה')[1][7] = new Date(Date.now() - 10 * 60000);
+box.sent.length = 0;
+box.workPollSummary();
+check('נשלח סיכום מעודכן לקבוצה', box.sent.length === 1, box.sent.length);
+check('המקווה ששוחרר מופיע כפנוי',
+  /שוחררו וממתינים \(1\)/.test(box.sent[0] ? box.sent[0].body.message : ''), box.sent[0] && box.sent[0].body.message);
+check('הסקר חזר להיות פתוח', rows(box, 'סקרי עבודה')[1][9] === 'פתוח');
+box.sent.length = 0;
+box.workPollSummary();
+check('ולא נשלח שוב בלי שינוי', box.sent.length === 0);
+
 console.log('\n— סקר שהמשימות שלו נמחקו מהגיליון —');
 box = setup();
 run(box, 'addWorkItems_', box.__ss, { items: MIKVAOT.slice(0, 2).map((m) => ({ mikveh: m, type: 'cert' })) }, USER);
