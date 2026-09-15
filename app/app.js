@@ -1229,6 +1229,7 @@
     data.groups = data.groups || []; data.reactions = data.reactions || []; data.perms = data.perms || null;
     data.contractors = data.contractors || []; data.contractorMsgs = data.contractorMsgs || [];
     $('#navCountTalk').textContent = data.messages.length;
+    $('#botCountTalk').textContent = data.messages.length || '';  // נקודה אדומה על 0 היא רעש
     $('#navCountWork').textContent = data.work.filter((w) => w.status !== 'done').length;
     data.projects = data.projects || []; data.projectStages = data.projectStages || {};
     if (window.MikvehProjects) MikvehProjects.refreshNav();
@@ -1236,6 +1237,9 @@
     initReport();
     initUser();
     $('#navToggle').addEventListener('click', () => document.body.classList.toggle('nav-open'));
+    // סרגל הניווט התחתון: שני הכפתורים שאינם קישורי מסך
+    $('#botReport').addEventListener('click', (e) => { e.preventDefault(); openReport(null); });
+    $('#botMore').addEventListener('click', (e) => { e.preventDefault(); document.body.classList.add('nav-open'); });
     $('#btnBack').addEventListener('click', () => { if (history.length > 1) history.back(); else location.hash = '#/'; });
     $('#navBackdrop').addEventListener('click', () => document.body.classList.remove('nav-open'));
     if (window.MikvehAuth) MikvehAuth.init();
