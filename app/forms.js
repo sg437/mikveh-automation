@@ -144,10 +144,16 @@
     MK.$('#rmStep1').hidden = true; MK.$('#rmStep2').hidden = true; root.hidden = false;
     const user = MK.getUser();
     let html = '<div class="rm-chosen"><div><div class="l">' + (key === 'inspection' ? 'דו"ח פיקוח כשרות המקוואות' : 'דיווח פעולה') + '</div><div class="v">' + esc(m.name) + '</div><div class="s">' + esc([m.council, m.region].filter(Boolean).join(' · ')) + '</div></div><button class="btn small" id="rmBack" type="button">חזרה</button></div>';
-    html += '<form id="rmForm" class="rform" novalidate>';
-    if (key === 'inspection') {
+    const insp = key === 'inspection';
+    html += '<form id="rmForm" class="rform' + (insp ? ' split' : '') + '" novalidate>';
+    if (insp) {
+      // עמודת ניווט המדורים (במובייל: פס דביק מתחת לכותרת) + גוף הטופס
+      html += '<nav class="fsecnav" id="fsecnav">' + INSPECTION.map((sec, i) =>
+        '<a href="#fsec' + i + '" data-sec="' + i + '"' + (i === 0 ? ' class="on"' : '') + '>' + esc(sec.title) + ' <span class="c"></span></a>').join('') + '</nav>';
+      html += '<div class="rform-main">';
+      html += '<div class="rform-prog">מולאו <b id="fFilled">0</b> מתוך <b id="fTotal">0</b> בדיקות<span class="trk"><span class="fil" id="fFill" style="width:0%"></span></span></div>';
       html += '<div class="fgrid">' + fieldHtml(F.date, 'date') + fieldHtml(F.rabbi, 'rabbi', user.name) + fieldHtml({ k: 'contact', t: 'text', l: 'שם האחראי' }, 'contact', m.attendant || '') + fieldHtml({ k: 'phone', t: 'text', l: 'מספר טלפון' }, 'phone', m.phone || '') + '</div>';
-      html += INSPECTION.map((sec, i) => '<details class="fsec"' + (i === 0 ? ' open' : '') + '><summary>' + esc(sec.title) + '<span class="cnt"></span></summary><div class="fgrid">' + sec.fields.map((f) => fieldHtml(f, 'c' + f.c)).join('') + '</div></details>').join('');
+      html += INSPECTION.map((sec, i) => '<details class="fsec" id="fsec' + i + '" data-sec="' + i + '"' + (i === 0 ? ' open' : '') + '><summary>' + esc(sec.title) + '<span class="cnt"></span></summary><div class="fgrid">' + sec.fields.map((f) => fieldHtml(f, 'c' + f.c)).join('') + '</div></details>').join('');
       html += '<div class="note-box" style="margin-top:8px">שדות שלא סומנו יישארו ריקים בדוח. לסימון מהיר: <button type="button" class="btn small" id="allOk">סמן את כל הבדיקות "תקין"</button></div>';
     } else {
       const def = ACTION_FORMS[key];
@@ -157,7 +163,7 @@
     }
     const pick = window.MikvehMedia ? MikvehMedia.picker('rmPics') : null;
     html += (pick ? '<div class="ff wide" style="margin-top:10px"><span class="lbl">תמונות (רשות)</span>' + pick.html + '</div>' : '');
-    html += '<div class="factions"><button class="btn primary" type="submit" id="rmSubmit">שמירה בתיק המקווה</button><span class="fmsg" id="rmMsg"></span></div></form>';
+    html += '<div class="factions"><button class="btn primary" type="submit" id="rmSubmit">שמירה בתיק המקווה</button><span class="fmsg" id="rmMsg"></span></div>' + (insp ? '</div>' : '') + '</form>';
     root.innerHTML = html;
     root._pics = pick ? pick.bind(root) : null;
 
@@ -184,8 +190,39 @@
       paint();
     }
     root.querySelectorAll('input[type=date]').forEach((inp) => inp.addEventListener('input', () => { const s = root.querySelector('[data-heb-for="' + inp.id + '"]'); if (s) s.textContent = hebOfDateInput(inp.value); }));
+    const nav = root.querySelector('#fsecnav');
+    if (nav) {
+      // מונה בדיקות: כל קבוצת רדיו במדור = בדיקה אחת. שדות טקסט אינם נספרים.
+      const paintProg = () => {
+        let filled = 0, total = 0;
+        root.querySelectorAll('details.fsec').forEach((d) => {
+          const names = [...new Set([...d.querySelectorAll('input[type=radio]')].map((r) => r.name))];
+          const done = names.filter((n) => d.querySelector('input[name="' + n + '"]:checked')).length;
+          filled += done; total += names.length;
+          const complete = names.length > 0 && done === names.length;
+          d.classList.toggle('done', complete);
+          const cnt = d.querySelector('.cnt');
+          if (cnt) cnt.textContent = names.length ? (complete ? 'הושלם' : done + '/' + names.length) : '';
+          const link = nav.querySelector('a[data-sec="' + d.dataset.sec + '"]');
+          if (link) { link.classList.toggle('done', complete); const c = link.querySelector('.c'); if (c) c.textContent = names.length ? (complete ? '✓' : done + '/' + names.length) : ''; }
+        });
+        root.querySelector('#fFilled').textContent = filled;
+        root.querySelector('#fTotal').textContent = total;
+        root.querySelector('#fFill').style.width = (total ? Math.round((filled / total) * 100) : 0) + '%';
+      };
+      root.querySelector('#rmForm').addEventListener('change', paintProg);
+      nav.addEventListener('click', (e) => {
+        const a = e.target.closest('a[data-sec]'); if (!a) return;
+        e.preventDefault();
+        nav.querySelectorAll('a').forEach((x) => x.classList.toggle('on', x === a));
+        const d = root.querySelector('#fsec' + a.dataset.sec);
+        if (d) { d.open = true; d.scrollIntoView({ block: 'start', behavior: 'smooth' }); }
+      });
+      root._paintProg = paintProg;
+      paintProg();
+    }
     const allOk = root.querySelector('#allOk');
-    if (allOk) allOk.addEventListener('click', () => { root.querySelectorAll('.ff.st').forEach((ff) => { const r = ff.querySelector('input[value="תקין"]'); if (r && !ff.querySelector('input:checked')) r.checked = true; }); });
+    if (allOk) allOk.addEventListener('click', () => { root.querySelectorAll('.ff.st').forEach((ff) => { const r = ff.querySelector('input[value="תקין"]'); if (r && !ff.querySelector('input:checked')) r.checked = true; }); if (root._paintProg) root._paintProg(); });
     root.querySelector('#rmForm').addEventListener('submit', (e) => { e.preventDefault(); submitForm(key, m, root); });
     root.scrollIntoView({ block: 'start' });
   }
