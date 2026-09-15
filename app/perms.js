@@ -6,6 +6,18 @@
   const ROLES = ['מפקח', 'קבלן', 'צופה'];
   const MK = () => window.MK;
   const esc = (s) => MK().esc(s);
+  /**
+   * ערך ההרשאה לתפקיד. גיליון או תשובה שנשארו עם שם תפקיד ישן ("בלנית")
+   * החזירו undefined, והתא הוצג "חסום" — כלומר הרשאה שקיימת נראתה כחסומה,
+   * בלי שום סימן שמשהו לא תואם. נופלים חזרה לשם הישן במקום להיכשל בשקט.
+   */
+  const OLD_NAMES = { 'קבלן': 'בלנית' };
+  function permOf(row, role) {
+    if (!row) return false;
+    if (role in row) return !!row[role];
+    const old = OLD_NAMES[role];
+    return !!(old && row[old]);
+  }
 
   function render() {
     const K = MK(), root = K.$('#permsBox') || K.$('#view-settings');
@@ -29,7 +41,7 @@
       const labels = perms._labels || {};
       const keys = Object.keys(perms).filter((k) => k !== '_labels');
       root.querySelector('#permTable tbody').innerHTML = keys.map((k) => '<tr data-k="' + esc(k) + '"><td>' + esc(labels[k] || k) + '</td>' +
-        ROLES.map((r) => '<td style="text-align:center"><label class="pill chk"><input type="checkbox" data-role="' + esc(r) + '"' + (perms[k][r] ? ' checked' : '') + '><span>' + (perms[k][r] ? 'מותר' : 'חסום') + '</span></label></td>').join('') + '</tr>').join('');
+        ROLES.map((r) => { const on = permOf(perms[k], r); return '<td style="text-align:center"><label class="pill chk"><input type="checkbox" data-role="' + esc(r) + '"' + (on ? ' checked' : '') + '><span>' + (on ? 'מותר' : 'חסום') + '</span></label></td>'; }).join('') + '</tr>').join('');
       root.querySelectorAll('#permTable input[type=checkbox]').forEach((c) => c.addEventListener('change', () => {
         const k = c.closest('tr').dataset.k, r = c.dataset.role;
         const patch = {}; patch[k] = {}; patch[k][r] = c.checked;

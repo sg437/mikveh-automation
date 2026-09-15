@@ -140,7 +140,7 @@
   }
 
   window.MikvehAuth = {
-    enabled, me, session, openLogin, logout, openMenu, renderUserButton, renderUsersView, loginWithToken,
+    enabled, me, session, openLogin, logout, openMenu, renderUserButton, renderUsersView, loginWithToken, roleOf,
     /** נקרא מ-app.js אחרי טעינת הנתונים */
     init: function () {
       const K = MK();

@@ -3,7 +3,7 @@
    לצד "מקוואות", במקום לראות בה את אותה אפליקציה. הקבצים המשותפים
    נטענים מהתיקייה שמעל (../), ולכן גם הם נשמרים כאן במטמון.
    להעלות גרסה בכל שינוי. data.js (~3.6MB) אינו ברשימה – הוא רק עותק גיבוי. */
-const CACHE = 'mikveh-talk-v10';
+const CACHE = 'mikveh-talk-v11';
 const FILES = ['./', './index.html', './manifest.json',
   '../app.js', '../forms.js', '../talk.js', '../work.js', '../media.js', '../edit.js', '../setup.js',
   '../perms.js', '../projects.js', '../contractor.js', '../auth.js', '../config.js', '../hebdate.js',
@@ -15,7 +15,13 @@ const SHELL = FILES.concat(['../data.js']).map((f) => new URL(f, self.location).
 const DATA_CACHE = 'mikveh-data';
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(FILES)).then(() => self.skipWaiting()));
+  e.waitUntil(caches.open(CACHE)
+    // cache:'reload' מכריח משיכה מהרשת. בלעדיו addAll עובר דרך מטמון ה-HTTP
+    // של הדפדפן, ו-GitHub Pages מגיש עם max-age=600 — כך שגרסה שנדחפה
+    // בתוך עשר דקות מהקודמת יכולה להיכנס למטמון החדש עם קובץ ישן, ולהיתקע
+    // שם עד העלאת הגרסה הבאה.
+    .then((c) => c.addAll(FILES.map((u) => new Request(u, { cache: 'reload' }))))
+    .then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', (e) => {
