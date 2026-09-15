@@ -95,19 +95,38 @@ check('אחרי הטריגר הנתונים מעודכנים', fresh.actions.len
 check('הטריגר החד-פעמי נמחק', !box.__triggers.some((t) => t.getHandlerFunction() === 'refreshDataCacheOnce'));
 check('הסימון הוסר', !box.__cache.get('apiData:dirty'));
 
-console.log('\n— הטריגר התקופתי בונה רק כשצריך —');
+console.log('\n— הטריגר התקופתי: העותק לעולם אינו חסר —');
+const age = (box, min) => box.__cache.put('apiData:built', String(Date.now() - min * 60000));
+
 box = setup();
 box.apiCachedDataJson_();
 reads = countReads(box);
 box.refreshDataCache();
 check('עותק טרי – אין בנייה מיותרת', reads() === 0, reads());
-box.__cache.put('apiData:built', String(Date.now() - 3600 * 1000));
-box.__cache.remove('apiData:used');
+
+// 20 דקות בשקט: מתחת לסף השקט (55 דק') – עוד לא בונים
+box = setup(); box.apiCachedDataJson_(); reads = countReads(box);
+age(box, 20); box.__cache.remove('apiData:used');
 box.refreshDataCache();
-check('עותק ישן ואף אחד לא נכנס – לא בונים', reads() === 0, reads());
-box.__cache.put('apiData:used', String(Date.now()));
+check('20 דקות בשקט – עוד לא בונים', reads() === 0, reads());
+
+// אותן 20 דקות, אבל מישהו נכנס לאחרונה – מעל סף הפעילות (13 דק')
+box = setup(); box.apiCachedDataJson_(); reads = countReads(box);
+age(box, 20); box.__cache.put('apiData:used', String(Date.now()));
 box.refreshDataCache();
-check('עותק ישן ומישהו נכנס – בונים', reads() > 0, reads());
+check('20 דקות ומישהו נכנס – בונים', reads() > 0, reads());
+
+// שעה בשקט – בונים בכל מקרה, כדי שהפתיחה הבאה תמצא עותק מוכן.
+// זו הטעות שנמדדה בשטח: 39 שניות למי שנכנס ראשון אחרי שקט.
+box = setup(); box.apiCachedDataJson_(); reads = countReads(box);
+age(box, 60); box.__cache.remove('apiData:used');
+box.refreshDataCache();
+check('שעה בשקט – בונים בכל זאת', reads() > 0, reads());
+
+// אין עותק כלל – תמיד בונים
+box = setup(); reads = countReads(box);
+box.refreshDataCache();
+check('אין עותק – בונים', reads() > 0, reads());
 
 console.log('\n— בלי טריגרים בכלל חוזרים להתנהגות הישנה (מחיקה) —');
 box = setup();

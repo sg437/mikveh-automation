@@ -248,10 +248,11 @@ function testApiSpeed() {
 const DATA_CACHE = {
   PREFIX: 'apiData:',
   CHUNK: 40000,
-  TTL: 21600,        // 6 שעות – המקסימום של CacheService
-  MAX_AGE: 540,      // 9 דקות: מעליהן הטריגר התקופתי בונה מחדש
-  IDLE: 1800,        // אם אף אחד לא נכנס חצי שעה – אין טעם לבנות מחדש כל הזמן
-  DELAY_MS: 5000,    // כמה להמתין לפני בנייה ברקע אחרי כתיבה
+  TTL: 21600,          // 6 שעות – המקסימום של CacheService
+  MAX_AGE: 780,        // 13 דקות בשעות פעילות: מעליהן הטריגר בונה מחדש
+  IDLE_MAX_AGE: 3300,  // 55 דקות גם כשאף אחד לא נכנס – ראה למטה
+  IDLE: 1800,          // "מישהו נכנס לאחרונה" = חצי השעה האחרונה
+  DELAY_MS: 5000,      // כמה להמתין לפני בנייה ברקע אחרי כתיבה
 };
 
 /** התשובה השמורה, או null אם אין עותק שלם. */
@@ -386,19 +387,26 @@ function refreshDataCacheOnce() {
 }
 
 /**
- * טריגר תקופתי (כל 5 דקות). בונה מחדש רק כשצריך:
- * אין עותק · נכנסה כתיבה · העותק התיישן **ומישהו השתמש באפליקציה לאחרונה**.
- * בלי התנאי האחרון היינו בונים 17 שניות כל 10 דקות גם בלילה, על חשבון מכסת
- * זמן הריצה של הסקריפט.
+ * טריגר תקופתי (כל 5 דקות). מחזיק את העותק חם — תמיד.
+ *
+ * הגרסה הראשונה כאן ויתרה על התחזוקה כשאיש לא נכנס לאפליקציה, כדי לחסוך
+ * מכסת זמן ריצה. זו הייתה טעות: אצל צוות שנכנס כמה פעמים ביום, כמעט כל
+ * אחד הוא "הראשון אחרי שקט" — והוא זה ששילם את 23 שניות הבנייה. נמדד
+ * בשטח: 39 שניות עד שהנתונים הוחלפו במסך.
+ *
+ * לכן שתי מדרגות, ובשתיהן העותק לעולם אינו חסר:
+ *   בשעות פעילות (מישהו נכנס בחצי השעה האחרונה) — רענון כל 13 דקות.
+ *   בשקט — רענון כל 55 דקות, כדי שגם הפתיחה הראשונה בבוקר תמצא עותק מוכן.
+ * בשקט זה כ-24 בניות ביממה; זול לעומת המתנה של 23 שניות למשתמש.
  */
 function refreshDataCache() {
   const cache = CacheService.getScriptCache();
   const has = cache.get(DATA_CACHE.PREFIX + 'n');
   const dirty = cache.get(DATA_CACHE.PREFIX + 'dirty');
-  const used = cache.get(DATA_CACHE.PREFIX + 'used');
-  const stale = apiDataAge_(cache) > DATA_CACHE.MAX_AGE;
-  if (!has && !used) return;                       // אין עותק ואף אחד לא נכנס – שהראשון יבנה
-  if (dirty || !has || (stale && used)) apiRefreshDataCache_();
+  const active = !!cache.get(DATA_CACHE.PREFIX + 'used');
+  const age = apiDataAge_(cache);
+  const stale = age > (active ? DATA_CACHE.MAX_AGE : DATA_CACHE.IDLE_MAX_AGE);
+  if (!has || dirty || stale) apiRefreshDataCache_();
 }
 
 /** מצב מטמון הנתונים – למסך "חיבור לגיליון" ולבדיקה מהעורך. */
