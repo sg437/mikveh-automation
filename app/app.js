@@ -1339,7 +1339,10 @@
     window.addEventListener('online', () => Outbox.flush());
     window.addEventListener('hashchange', route);
     if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
-      navigator.serviceWorker.register('sw.js').catch(() => {}); // בתיקיית talk/ נרשם ה-SW שלה (נתיב יחסי למסמך)
+      // updateViaCache:'none' — בלעדיו הדפדפן מגיש את sw.js עצמו ממטמון ה-HTTP
+      // (GitHub Pages: max-age=600), ואז גם גרסה חדשה לא נבדקת מיד.
+      // בתיקיית talk/ נרשם ה-SW שלה (נתיב יחסי למסמך).
+      navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).catch(() => {});
     }
   }
 
