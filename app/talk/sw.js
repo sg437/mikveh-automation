@@ -3,7 +3,7 @@
    לצד "מקוואות", במקום לראות בה את אותה אפליקציה. הקבצים המשותפים
    נטענים מהתיקייה שמעל (../), ולכן גם הם נשמרים כאן במטמון.
    להעלות גרסה בכל שינוי. data.js (~3.6MB) אינו ברשימה – הוא רק עותק גיבוי. */
-const CACHE = 'mikveh-talk-v4';
+const CACHE = 'mikveh-talk-v5';
 const FILES = ['./', './index.html', './manifest.json',
   '../app.js', '../forms.js', '../talk.js', '../work.js', '../media.js', '../edit.js', '../setup.js',
   '../perms.js', '../projects.js', '../contractor.js', '../auth.js', '../config.js', '../hebdate.js',

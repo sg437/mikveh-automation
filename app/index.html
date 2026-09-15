@@ -130,6 +130,10 @@ main{flex:1;min-width:0;max-width:1180px;margin:0 auto;padding:var(--s4) var(--s
 body.talk-app .botnav,body.talk-app .sidenav,body.talk-app .nav-toggle:not(.back),
 body.talk-app #btnReport{display:none}
 body.talk-app{padding-bottom:0}
+/* מודאל פתוח: הסרגל צף מעליו (z-index 60 מול 50) והסתיר את רשימת ההשלמה
+   של שם המקווה. הוא גם מיותר כל עוד המודאל פתוח. */
+body:has(.modal-bg:not([hidden])) .botnav{display:none}
+body:has(.modal-bg:not([hidden])) .toast{bottom:var(--s4)}
 
 /* ============================ כלים ============================ */
 .toolbar{background:var(--card);border:1px solid var(--line);border-radius:var(--radius-lg);
