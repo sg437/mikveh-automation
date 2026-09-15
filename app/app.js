@@ -16,6 +16,40 @@
   // מתיקיית talk/ הקבצים המשותפים נמצאים ברמה אחת מעל
   const BASE = window.TALK_APP ? '../' : '';
 
+  // ============================================================ מדידת זמני פתיחה
+  // "לוקח כמה שניות" יכול להיות השרת, הרשת, פענוח ה-JSON או בניית המסך —
+  // ארבעה דברים שונים עם ארבעה תיקונים שונים. כאן מודדים במקום לנחש.
+  // performance.now() נמדד מרגע שהדפדפן התחיל לפתוח את העמוד, ולכן "סך הכל"
+  // כולל גם את הורדת קבצי האפליקציה עצמם – ולא רק את מה שקורה אחרי שהם נטענו.
+  const HAS_PERF = !!(window.performance && performance.now);
+  const now = () => (HAS_PERF ? performance.now() : Date.now());
+  const T_START = now();
+  const Timing = {
+    data: null,
+    set: function (t) { this.data = Object.assign(this.data || {}, t); },
+    done: function () {
+      this.set({ totalMs: Math.round(HAS_PERF ? now() : now() - T_START) });
+      const t = this.data;
+      console.log('⏱️ פתיחת המערכת: סך הכל ' + (t.totalMs / 1000).toFixed(1) + ' שניות' +
+        (t.fetchMs !== undefined ? ' · המתנה לשרת ' + (t.fetchMs / 1000).toFixed(1) + 'ש' : '') +
+        (t.bytes !== undefined ? ' · ' + (t.bytes / 1048576).toFixed(2) + 'MB' : '') +
+        (t.parseMs !== undefined ? ' · פענוח ' + t.parseMs + 'ms' : '') +
+        (t.renderMs !== undefined ? ' · בניית המסך ' + t.renderMs + 'ms' : ''));
+      window.MIKVEH_TIMING = t;
+    },
+    /** טקסט קצר למסך "חיבור לגיליון" */
+    text: function () {
+      const t = this.data;
+      if (!t || t.totalMs === undefined) return '';
+      const sec = (ms) => (ms / 1000).toFixed(1) + ' ש\'';
+      return 'סך הכל ' + sec(t.totalMs) +
+        (t.fetchMs !== undefined ? ' · המתנה לשרת ' + sec(t.fetchMs) : '') +
+        (t.bytes !== undefined ? ' · ' + (t.bytes / 1048576).toFixed(2) + ' MB' : '') +
+        (t.parseMs !== undefined ? ' · פענוח ' + t.parseMs + ' ms' : '') +
+        (t.renderMs !== undefined ? ' · בניית המסך ' + t.renderMs + ' ms' : '');
+    },
+  };
+
   // ============================================================ מקור נתונים
   // חיבור חי לגיליון דרך ה-Apps Script (Api.js). אם אין כתובת או שהרשת נופלת –
   // האפליקציה ממשיכה לעבוד מקובץ data.js (עותק סטטי).
@@ -49,9 +83,20 @@
         return d;
       });
       if (!url) return fallback(null);
+      // מדידה: כמה המתנו לשרת, כמה ירד, וכמה לקח לפענח. בלי זה אי אפשר לדעת
+      // אם פתיחה איטית היא השרת, הרשת או העיבוד במכשיר. התוצאה נרשמת
+      // ב-console ומוצגת במסך "חיבור לגיליון".
+      const t0 = now();
       return fetch(url, { redirect: 'follow', cache: 'no-store' })
-        .then((r) => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json().then((d) => [d, r.headers.get('X-From-Cache') === '1']); })
-        .then(([d, cached]) => { if (d.error) throw new Error(d.error); d.source = cached ? 'cached' : 'live'; return d; })
+        .then((r) => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text().then((txt) => [txt, r.headers.get('X-From-Cache') === '1']); })
+        .then(([txt, cached]) => {
+          const t1 = now();
+          const d = JSON.parse(txt);
+          if (d.error) throw new Error(d.error);
+          d.source = cached ? 'cached' : 'live';
+          Timing.set({ fetchMs: Math.round(t1 - t0), parseMs: Math.round(now() - t1), bytes: txt.length });
+          return d;
+        })
         .catch((err) => { console.warn('טעינה מהגיליון נכשלה, עובדים מהעותק המקומי:', err); return fallback(err); });
     },
     /** קריאה ממוקדת מהשרת (נתונים שלא מגיעים בטעינה הראשית). */
@@ -1203,6 +1248,7 @@
   // ============================================================ הפעלה
   // הטעינה מתחילה אחרי שכל הסקריפטים (auth.js וכו') נטענו, כדי שהסשן יישלח עם הבקשה
   const start = () => DataSource.load().then((data) => {
+    const tRender = now();
     buildIndexes(data);
     $('#navCountList').textContent = data.mikvaot.length;
     $('#navCountTasks').textContent = data.tasks.length;
@@ -1219,7 +1265,7 @@
     $('#footer').textContent = (data.source === 'live' || data.source === 'cached' ? 'מקור הנתונים: ' + (data.meta.spreadsheet || 'הגיליון החי') : 'מקור הנתונים: עותק מקומי של הגיליון') +
       ' (' + data.mikvaot.length + ' מקוואות, ' + data.actions.length + ' פעולות, ' + data.inspections.length + ' דוחות פיקוח, ' + (data.whatsapp || []).length + ' דיווחי וואטסאפ). גרסת מערכת 0.2';
     if (window.MikvehSetup) MikvehSetup.banner(data.source);
-    window.MK = { S, $, esc, hebOf, fmtDate, parseISO, badge, tel, findByName, DataSource, route, buildIndexes: rebuild, addAction, getUser, requireUser, openUserModal, toast, openReport, closeReport, pickMikveh, exportTable, uniq, fillSelect, certRows, drainedRows };
+    window.MK = { S, $, esc, hebOf, fmtDate, parseISO, badge, tel, findByName, DataSource, route, Timing, buildIndexes: rebuild, addAction, getUser, requireUser, openUserModal, toast, openReport, closeReport, pickMikveh, exportTable, uniq, fillSelect, certRows, drainedRows };
     // מצב "אפליקציית דיונים" – פתיחה ישירה בדיונים, בלי שאר המסכים
     if (TALK_APP) {
       document.body.classList.add('talk-app');
@@ -1248,6 +1294,8 @@
     window.addEventListener('online', () => Outbox.flush());
     window.addEventListener('hashchange', route);
     route();
+    Timing.set({ renderMs: Math.round(now() - tRender) });
+    Timing.done();
     if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
       navigator.serviceWorker.register('sw.js').catch(() => {}); // בתיקיית talk/ נרשם ה-SW שלה (נתיב יחסי למסמך)
     }

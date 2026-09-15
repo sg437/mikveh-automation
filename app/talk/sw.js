@@ -3,7 +3,7 @@
    לצד "מקוואות", במקום לראות בה את אותה אפליקציה. הקבצים המשותפים
    נטענים מהתיקייה שמעל (../), ולכן גם הם נשמרים כאן במטמון.
    להעלות גרסה בכל שינוי. data.js (~3.6MB) אינו ברשימה – הוא רק עותק גיבוי. */
-const CACHE = 'mikveh-talk-v6';
+const CACHE = 'mikveh-talk-v7';
 const FILES = ['./', './index.html', './manifest.json',
   '../app.js', '../forms.js', '../talk.js', '../work.js', '../media.js', '../edit.js', '../setup.js',
   '../perms.js', '../projects.js', '../contractor.js', '../auth.js', '../config.js', '../hebdate.js',
@@ -20,9 +20,27 @@ self.addEventListener('activate', (e) => {
   );
 });
 
-// רשת קודם, ואם אין רשת – מהמטמון (זהה ל-sw.js של המערכת).
+// מטמון קודם לקבצי האפליקציה, רשת קודם לכל השאר (זהה ל-sw.js של המערכת).
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return;
+  const url = new URL(e.request.url);
+  const isShell = url.origin === self.location.origin && e.request.destination !== 'empty';
+
+  if (isShell) {
+    e.respondWith(
+      caches.match(e.request).then((cached) => {
+        const net = fetch(e.request).then((res) => {
+          if (res.ok) caches.open(CACHE).then((c) => c.put(e.request, res.clone())).catch(() => {});
+          return res;
+        });
+        if (!cached) return net;
+        net.catch(() => {});
+        return cached;
+      })
+    );
+    return;
+  }
+
   e.respondWith(
     fetch(e.request).then((res) => {
       if (res.ok || res.type === 'opaque') {
