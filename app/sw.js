@@ -1,7 +1,7 @@
 /* Service worker: מטמון של קבצי האפליקציה לעבודה לא מקוונת. להעלות גרסה בכל שינוי.
    data.js (~3.6MB) אינו ברשימה בכוונה: הוא רק עותק גיבוי, והכללתו גרמה להורדה
    מחדש של 3.6MB בכל העלאת גרסה. הוא נכנס למטמון לבד אם וכאשר הוא נטען. */
-const CACHE = 'mikveh-app-v42';
+const CACHE = 'mikveh-app-v43';
 /* התשובה מהגיליון נשמרת במטמון נפרד, שאינו נמחק בהעלאת גרסה: האפליקציה
    מציגה אותו מיד בפתיחה, לפני שהרשת עונה, ולא היה טעם שהעלאת גרסה תחזיר
    כל אחד להמתנה מלאה בפתיחה שאחריה. */
@@ -15,7 +15,13 @@ const FILES = ['./', './index.html', './app.js', './forms.js', './talk.js', './w
 const SHELL = FILES.concat(['./data.js']).map((f) => new URL(f, self.location).href);
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(FILES)).then(() => self.skipWaiting()));
+  e.waitUntil(caches.open(CACHE)
+    // cache:'reload' מכריח משיכה מהרשת. בלעדיו addAll עובר דרך מטמון ה-HTTP
+    // של הדפדפן, ו-GitHub Pages מגיש עם max-age=600 — כך שגרסה שנדחפה
+    // בתוך עשר דקות מהקודמת יכולה להיכנס למטמון החדש עם קובץ ישן, ולהיתקע
+    // שם עד העלאת הגרסה הבאה.
+    .then((c) => c.addAll(FILES.map((u) => new Request(u, { cache: 'reload' }))))
+    .then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', (e) => {
@@ -53,7 +59,10 @@ self.addEventListener('fetch', (e) => {
   if (isShell) {
     e.respondWith(
       caches.match(e.request).then((cached) => {
-        const net = fetch(e.request).then((res) => {
+        // גם כאן: בלי no-cache הרענון יכול לכתוב בחזרה את אותו קובץ ישן
+        const fresh = e.request.mode === 'navigate' ? e.request
+          : new Request(e.request.url, { cache: 'no-cache', credentials: 'same-origin' });
+        const net = fetch(fresh).then((res) => {
           if (res.ok) caches.open(CACHE).then((c) => c.put(e.request, res.clone())).catch(() => {});
           return res;
         });
