@@ -11,7 +11,16 @@
   const MK = () => window.MK;
   const esc = (s) => MK().esc(s);
 
-  function session() { try { return JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) { return null; } }
+  function session() {
+    try {
+      const s = JSON.parse(localStorage.getItem(KEY) || 'null');
+      // הסשן נשמר במכשיר ל-90 יום, ולכן יכול להחזיק שם תפקיד מלפני ההסבה
+      // ("בלנית" ⟵ "קבלן"). מנרמלים כאן, בנקודה שדרכה עוברות כל הקריאות:
+      // כפתור הכותרת, תפריט המשתמש, מסך המשתמשים ובדיקות ההרשאה.
+      if (s && s.user) s.user.role = roleOf(s.user.role);
+      return s;
+    } catch (e) { return null; }
+  }
   function saveSession(s) { try { if (s) localStorage.setItem(KEY, JSON.stringify(s)); else localStorage.removeItem(KEY); } catch (e) { /* ignore */ } }
   function enabled() { const K = MK(); return !!(K && K.S.data && K.S.data.authEnabled); }
   function me() { const s = session(); return s && s.user ? s.user : null; }
@@ -66,7 +75,7 @@
       saveSession({ token: res.token, user: res.user, expires: res.expires });
       msg.textContent = '';
       closeLogin(); renderUserButton();
-      K.toast('שלום ' + res.user.name + ' (' + res.user.role + ')');
+      K.toast('שלום ' + res.user.name + ' (' + roleOf(res.user.role) + ')');
       if (loginCb) { const cb = loginCb; loginCb = null; cb(res.user); }
       return res.user;
     }).catch((err) => { msg.textContent = 'הכניסה נכשלה: ' + err.message; msg.className = 'fmsg bad'; throw err; });
