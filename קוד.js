@@ -256,8 +256,25 @@ function getSheet_(name) {
   return sheet;
 }
 
+/**
+ * מאפיין מ-Script Properties.
+ *
+ * כל קריאה היא פנייה לשירות חיצוני (עשרות אלפיות שנייה), ובקשה אחת של
+ * ?action=data קוראת כמה וכמה מאפיינים. כאן הם נקראים פעם אחת לכל הרצה
+ * ונשמרים בזיכרון. הרצה חדשה (כל בקשה, כל טריגר) מתחילה מדף חלק, ולכן שינוי
+ * מאפיין בעורך נתפס מיד. מי שכותב מאפיין תוך כדי ריצה (ALERT_LAST_ROW)
+ * פונה ל-PropertiesService ישירות ואינו עובר כאן.
+ */
+var PROPS_CACHE_ = null; // var בכוונה: גלובלי, כדי שבדיקה תוכל לאפסו בין "הרצות"
+
 function getProp_(key) {
-  return PropertiesService.getScriptProperties().getProperty(key) || '';
+  if (!PROPS_CACHE_) {
+    const store = PropertiesService.getScriptProperties();
+    if (!store.getProperties) return store.getProperty(key) || '';
+    try { PROPS_CACHE_ = store.getProperties() || {}; }
+    catch (err) { return store.getProperty(key) || ''; }
+  }
+  return PROPS_CACHE_[key] || '';
 }
 
 function jsonResponse_(obj) {

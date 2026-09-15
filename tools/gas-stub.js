@@ -69,6 +69,7 @@ function makeSpreadsheet() {
   const sheets = {};
   return {
     _sheets: sheets,
+    getName: () => 'גיליון בדיקה',
     getSheetByName: (n) => sheets[n] || null,
     insertSheet: (n) => (sheets[n] = makeSheet(n)),
     _add: (n, rows) => { const sh = makeSheet(n); rows.forEach((r) => sh.appendRow(r)); sheets[n] = sh; return sh; },
@@ -78,6 +79,18 @@ function makeSpreadsheet() {
 function load(files, extra) {
   const ss = makeSpreadsheet();
   let uuid = 0;
+  // מטמון אמיתי בזיכרון, כדי שנוכל לבדוק את מטמון הנתונים (Api.js) מחוץ לגוגל.
+  const store = new Map();
+  const cache = {
+    get: (k) => (store.has(k) ? store.get(k) : null),
+    getAll: (keys) => { const o = {}; keys.forEach((k) => { if (store.has(k)) o[k] = store.get(k); }); return o; },
+    put: (k, v) => { store.set(k, String(v)); },
+    putAll: (map) => { Object.keys(map).forEach((k) => store.set(k, String(map[k]))); },
+    remove: (k) => { store.delete(k); },
+    removeAll: (keys) => { keys.forEach((k) => store.delete(k)); },
+    _store: store,
+  };
+  const triggers = [];
   const sandbox = {
     console,
     SpreadsheetApp: { openById: () => ss, getActiveSpreadsheet: () => ss },
@@ -96,14 +109,30 @@ function load(files, extra) {
           .replace(/'/g, '');
       },
     },
-    CacheService: { getScriptCache: () => ({ get: () => null, put: () => {}, remove: () => {} }) },
+    CacheService: { getScriptCache: () => cache },
+    ScriptApp: {
+      getProjectTriggers: () => triggers.slice(),
+      deleteTrigger: (t) => { const i = triggers.indexOf(t); if (i >= 0) triggers.splice(i, 1); },
+      newTrigger: (fn) => {
+        const t = { getHandlerFunction: () => fn, _every: 0, _after: 0 };
+        const b = {
+          timeBased: () => b,
+          after: (ms) => { t._after = ms; return b; },
+          everyMinutes: (m) => { t._every = m; return b; },
+          create: () => { triggers.push(t); return t; },
+        };
+        return b;
+      },
+    },
     LockService: { getScriptLock: () => ({ waitLock: () => {}, releaseLock: () => {} }) },
-    PropertiesService: { getScriptProperties: () => ({ getProperty: (k) => (sandbox.__props[k] === undefined ? null : sandbox.__props[k]), setProperty: () => {} }) },
+    PropertiesService: { getScriptProperties: () => ({ getProperty: (k) => (sandbox.__props[k] === undefined ? null : sandbox.__props[k]), getProperties: () => Object.assign({}, sandbox.__props), setProperty: () => {} }) },
     UrlFetchApp: { fetch: () => ({ getResponseCode: () => 200, getContentText: () => '{}' }) },
     Logger: { log: () => {} },
     Session: { getScriptTimeZone: () => 'Asia/Jerusalem' },
     __props: { MIKVAOT_SHEET_ID: 'sheet', NOTIFY_WHATSAPP: '', GOOGLE_CLIENT_ID: 'cid' },
     __ss: ss,
+    __cache: cache,
+    __triggers: triggers,
   };
   sandbox.global = sandbox;
   vm.createContext(sandbox);

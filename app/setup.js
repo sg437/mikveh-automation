@@ -60,6 +60,14 @@
         : NO('WA_BRIDGE=1', '+ GROUP_CHAT_ID')],
       ['סקר חלוקת עבודה בוואטסאפ', p.waWorkPoll ? OK + ' <small>– מי שמסמן בסקר, המשימה נרשמת על שמו</small>'
         : NO('WA_WORK_POLL=1', '+ GROUP_CHAT_ID והרצת installWorkPollTrigger')],
+      ['מהירות הטעינה', (function () {
+        // מטמון הנתונים הוא ההבדל בין פתיחה של שנייה לפתיחה של 17 שניות.
+        const c = d.dataCache || {};
+        if (!c.trigger) return '<span class="badge bad">הטריגר חסר</span> <small>– הרץ פעם אחת <code dir="ltr">installDataCacheTrigger</code> בעורך הסקריפט; בלעדיו כל פתיחה אחרי דיווח בונה את הנתונים מחדש</small>';
+        if (!c.warm) return '<span class="badge warn">העותק עוד לא נבנה</span> <small>– הפתיחה הראשונה תהיה איטית, ומשם והלאה מיידית</small>';
+        return OK + ' <small>– עותק מוכן' + (c.ageSec !== null && c.ageSec !== undefined ? ' מלפני ' + Math.round(c.ageSec / 60) + ' דק\'' : '') +
+          (c.dirty ? ', ובנייה מחדש בדרך' : '') + '</small>';
+      })()],
       ['מי רשאי להיכנס', p.openSignup
         ? '<span class="badge warn">כל חשבון Google</span> נרשם לבד כ<b>' + esc(p.defaultRole || 'מפקח') + '</b>' +
           ' <small>– להסיר <code dir="ltr">OPEN_SIGNUP</code> כדי לסגור</small>'
