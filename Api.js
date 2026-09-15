@@ -93,7 +93,9 @@ function apiHandle_(e, action) {
       const body = apiCachedDataJson_();
       const tok = (e.parameter && e.parameter.session) || '';
       const extra = {
-        me: tok ? authSession_(apiSpreadsheet_(), tok) : null,
+        // authSessionFast_ נמנע מפתיחת הגיליון כשהסשן כבר במטמון: openById
+        // על גיליון בגודל הזה עולה שנייה ויותר, בדיוק במסלול שאמור להיות מיידי.
+        me: tok ? authSessionFast_(tok) : null,
         authEnabled: authEnabled_(),
         // ה-Client ID אינו סוד – הוא גלוי בכל דף שמציג כניסה עם Google. מסירת
         // הערך כאן חוסכת הקלדה של 72 תווים בכל מכשיר, מקור ל-invalid_client.
@@ -125,6 +127,7 @@ function apiPing_() {
     alertChat: !!getProp_('ALERT_CHAT_ID'),
     defaultRole: getProp_('DEFAULT_ROLE') || ''
   };
+  out.dataCache = apiDataCacheStatus_();
   if (id) {
     const ss = SpreadsheetApp.openById(id);
     out.mikvaotSheetName = ss.getName();
@@ -147,9 +150,11 @@ function apiPing_() {
  * CacheService מוגבל גם במספר הפריטים בכתיבה אחת, והתשובה נשמרת בכ-35 פיסות.
  * אם השמירה נכשלת, apiCachedDataJson_ בולע את השגיאה וממשיך להחזיר תשובה
  * נכונה – פשוט בונה אותה מחדש בכל פעם, בלי שום סימן חיצוני.
+ *
+ * לבדיקה שהטריגרים מותקנים: testDataTriggers.
  */
 function testDataCache() {
-  apiInvalidateData_();
+  apiClearDataCache_();
   const t1 = Date.now();
   const first = apiCachedDataJson_();
   const ms1 = Date.now() - t1;
@@ -219,8 +224,19 @@ function testApiSpeed() {
 /**
  * מטמון לתשובת ?action=data.
  *
- * בניית התשובה קוראת 13 לשוניות ונמשכת שניות רבות, ובלעדיו כל רענון של כל
- * משתמש משלם את המחיר במלואו. כאן רק הטעינה הראשונה אחרי שינוי משלמת.
+ * בניית התשובה קוראת 15 לשוניות ונמשכת כ-17 שניות. הכלל כאן: **אף בקשה של
+ * משתמש לא משלמת את הבנייה.** מי שבונה הוא טריגר ברקע; הבקשה מחזירה תמיד את
+ * העותק ששמור, גם אם התיישן בדקות ספורות.
+ *
+ * למה זה נדרש: קודם המטמון חי 10 דקות בלבד, וכל כתיבה מחקה אותו. אצל צוות
+ * של כמה מפקחים – שנכנסים כמה פעמים ביום, ושכל דיווח מהוואטסאפ מוחק להם את
+ * המטמון – המטמון היה ריק כמעט תמיד, ולכן כמעט כל פתיחה שילמה 17 שניות.
+ * מכאן ה"לפעמים מהר ולפעמים לאט" שנראה מקרי.
+ *
+ *   TTL     6 שעות (המקסימום ב-CacheService) – העותק לא נעלם מתחת לידיים.
+ *   MAX_AGE מעל זה הטריגר בונה מחדש, כדי לתפוס גם עריכה שנעשתה ידנית בגיליון.
+ *   dirty   סימון שכתיבה נכנסה. במקום למחוק את העותק – מסמנים, ממשיכים להגיש
+ *           את הקודם, ומזמינים בנייה ברקע בעוד כמה שניות.
  *
  * CacheService מוגבל ל-100KB לערך, ולכן התשובה נשמרת בפיסות. הגודל נמדד
  * בתווים ולא בבתים, ואות עברית תופסת שני בתים ב-UTF-8 – ומכאן פיסה של
@@ -229,46 +245,200 @@ function testApiSpeed() {
  * שדות שתלויים במשתמש (me, authEnabled) אינם נכנסים למטמון; הם מתווספים
  * לתשובה אחרי השליפה.
  */
-const DATA_CACHE = { PREFIX: 'apiData:', CHUNK: 40000, TTL: 600 };
+const DATA_CACHE = {
+  PREFIX: 'apiData:',
+  CHUNK: 40000,
+  TTL: 21600,        // 6 שעות – המקסימום של CacheService
+  MAX_AGE: 540,      // 9 דקות: מעליהן הטריגר התקופתי בונה מחדש
+  IDLE: 1800,        // אם אף אחד לא נכנס חצי שעה – אין טעם לבנות מחדש כל הזמן
+  DELAY_MS: 5000,    // כמה להמתין לפני בנייה ברקע אחרי כתיבה
+};
 
-function apiCachedDataJson_() {
-  const cache = CacheService.getScriptCache();
+/** התשובה השמורה, או null אם אין עותק שלם. */
+function apiReadDataCache_(cache) {
   const count = cache.get(DATA_CACHE.PREFIX + 'n');
-  if (count) {
-    const n = Number(count);
-    const keys = [];
-    for (let i = 0; i < n; i++) keys.push(DATA_CACHE.PREFIX + i);
-    const got = cache.getAll(keys);
-    let out = '', whole = true;
-    for (let i = 0; i < n; i++) {
-      const part = got[DATA_CACHE.PREFIX + i];
-      if (part === null || part === undefined) { whole = false; break; } // פיסה פגה – בונים מחדש
-      out += part;
-    }
-    if (whole && out) return out;
+  if (!count) return null;
+  const n = Number(count);
+  const keys = [];
+  for (let i = 0; i < n; i++) keys.push(DATA_CACHE.PREFIX + i);
+  const got = cache.getAll(keys);
+  let out = '';
+  for (let i = 0; i < n; i++) {
+    const part = got[DATA_CACHE.PREFIX + i];
+    if (part === null || part === undefined) return null; // פיסה פגה – בונים מחדש
+    out += part;
   }
-  const json = JSON.stringify(apiBuildData_());
+  return out || null;
+}
+
+/** שומר את התשובה בפיסות, עם חותמת זמן הבנייה. */
+function apiStoreDataJson_(cache, json) {
   try {
     const map = {};
     let n = 0;
     for (let i = 0; i < json.length; i += DATA_CACHE.CHUNK) { map[DATA_CACHE.PREFIX + n] = json.slice(i, i + DATA_CACHE.CHUNK); n++; }
     map[DATA_CACHE.PREFIX + 'n'] = String(n);
+    map[DATA_CACHE.PREFIX + 'built'] = String(Date.now());
     cache.putAll(map, DATA_CACHE.TTL);
+    return true;
   } catch (err) {
     Logger.log('שמירת המטמון נכשלה: ' + err); // לא קריטי – התשובה עדיין נכונה
+    return false;
   }
+}
+
+function apiCachedDataJson_() {
+  const cache = CacheService.getScriptCache();
+  try { cache.put(DATA_CACHE.PREFIX + 'used', String(Date.now()), DATA_CACHE.IDLE); } catch (e) { /* לא קריטי */ }
+  const saved = apiReadDataCache_(cache);
+  if (saved) {
+    // העותק מוגש מיד; אם התיישן או שנכנסה כתיבה – הבנייה מחדש רצה ברקע.
+    if (cache.get(DATA_CACHE.PREFIX + 'dirty') || apiDataAge_(cache) > DATA_CACHE.MAX_AGE) apiScheduleDataRefresh_(cache);
+    return saved;
+  }
+  // אין עותק כלל (פעם ראשונה, או שהמטמון התרוקן) – רק כאן מישהו מחכה לבנייה.
+  const json = JSON.stringify(apiBuildData_());
+  apiStoreDataJson_(cache, json);
   return json;
 }
 
-/** מנקה את המטמון. נקרא אחרי כל כתיבה, כדי שהשינוי ייראה מיד. */
+/** גיל העותק השמור בשניות (ענק אם אין חותמת). */
+function apiDataAge_(cache) {
+  const built = Number(cache.get(DATA_CACHE.PREFIX + 'built') || 0);
+  return built ? (Date.now() - built) / 1000 : 1e9;
+}
+
+/**
+ * כתיבה נכנסה. לא מוחקים את העותק – מסמנים אותו, כדי שהמשתמש הבא יקבל תשובה
+ * מיידית (ולא ימתין 17 שניות), ומזמינים בנייה ברקע שתחליף אותו תוך שניות.
+ */
 function apiInvalidateData_() {
+  let cache = null;
+  try { cache = CacheService.getScriptCache(); } catch (e) { return; }
+  try { cache.put(DATA_CACHE.PREFIX + 'dirty', String(Date.now()) + '-' + Math.random().toString(36).slice(2, 8), DATA_CACHE.TTL); } catch (e) { /* ממשיכים */ }
+  // אם אי אפשר לקבוע בנייה ברקע (אין הרשאה לטריגרים וכו') – חוזרים להתנהגות
+  // הישנה, מחיקה, כדי שלא יוגשו נתונים ישנים בלי שאף אחד יבנה מחדש.
+  if (!apiScheduleDataRefresh_(cache)) apiClearDataCache_();
+}
+
+/** מחיקה מלאה של המטמון (בדיקות, ומצב חירום שבו אין טריגרים). */
+function apiClearDataCache_() {
   try {
     const cache = CacheService.getScriptCache();
     const count = cache.get(DATA_CACHE.PREFIX + 'n');
-    const keys = [DATA_CACHE.PREFIX + 'n'];
+    const keys = [DATA_CACHE.PREFIX + 'n', DATA_CACHE.PREFIX + 'built', DATA_CACHE.PREFIX + 'dirty'];
     if (count) for (let i = 0; i < Number(count); i++) keys.push(DATA_CACHE.PREFIX + i);
     cache.removeAll(keys);
   } catch (err) { Logger.log('ניקוי המטמון נכשל: ' + err); }
+}
+
+/**
+ * מזמין בנייה מחדש ברקע בעוד כמה שניות (טריגר חד-פעמי).
+ * מסומן במטמון כדי שרצף כתיבות לא ייצור עשרות טריגרים.
+ */
+function apiScheduleDataRefresh_(cache) {
+  if (typeof ScriptApp === 'undefined') return false;
+  if (cache && cache.get(DATA_CACHE.PREFIX + 'pending')) return true; // כבר הוזמן
+  try {
+    ScriptApp.newTrigger('refreshDataCacheOnce').timeBased().after(DATA_CACHE.DELAY_MS).create();
+  } catch (err) {
+    // המכסה היא 20 טריגרים לסקריפט. אם נשארו טריגרים חד-פעמיים שלא רצו,
+    // מנקים אותם ומנסים שוב פעם אחת – ורק אז מוותרים.
+    Logger.log('הזמנת בנייה ברקע נכשלה: ' + err);
+    try {
+      ScriptApp.getProjectTriggers().forEach(function (t) {
+        if (t.getHandlerFunction() === 'refreshDataCacheOnce') ScriptApp.deleteTrigger(t);
+      });
+      ScriptApp.newTrigger('refreshDataCacheOnce').timeBased().after(DATA_CACHE.DELAY_MS).create();
+    } catch (err2) {
+      Logger.log('גם אחרי ניקוי טריגרים לא הצלחנו: ' + err2);
+      return false;
+    }
+  }
+  if (cache) { try { cache.put(DATA_CACHE.PREFIX + 'pending', '1', 120); } catch (e) { /* לא קריטי */ } }
+  return true;
+}
+
+/** בונה מחדש ושומר. מנקה את סימון ה-dirty רק אם לא נכנסה כתיבה תוך כדי הבנייה. */
+function apiRefreshDataCache_() {
+  const cache = CacheService.getScriptCache();
+  const mark = cache.get(DATA_CACHE.PREFIX + 'dirty');
+  const t0 = Date.now();
+  const json = JSON.stringify(apiBuildData_());
+  apiStoreDataJson_(cache, json);
+  // הסימון מוסר רק אם לא השתנה תוך כדי הבנייה. השתנה = נכנסה כתיבה נוספת
+  // אחרי שהתחלנו לקרוא מהגיליון, והרענון הבא צריך לתפוס אותה.
+  const now = cache.get(DATA_CACHE.PREFIX + 'dirty');
+  if (mark && now === mark) cache.remove(DATA_CACHE.PREFIX + 'dirty');
+  Logger.log('מטמון הנתונים נבנה מחדש: ' + (Date.now() - t0) + ' ms, ' + Math.round(json.length / 1024) + ' KB');
+  return json.length;
+}
+
+/** טריגר חד-פעמי אחרי כתיבה. מוחק את עצמו כדי לא לצבור טריגרים. */
+function refreshDataCacheOnce() {
+  try {
+    ScriptApp.getProjectTriggers().forEach(function (t) {
+      if (t.getHandlerFunction() === 'refreshDataCacheOnce') ScriptApp.deleteTrigger(t);
+    });
+  } catch (err) { Logger.log('ניקוי טריגר חד-פעמי נכשל: ' + err); }
+  try { CacheService.getScriptCache().remove(DATA_CACHE.PREFIX + 'pending'); } catch (e) { /* ממשיכים */ }
+  apiRefreshDataCache_();
+}
+
+/**
+ * טריגר תקופתי (כל 5 דקות). בונה מחדש רק כשצריך:
+ * אין עותק · נכנסה כתיבה · העותק התיישן **ומישהו השתמש באפליקציה לאחרונה**.
+ * בלי התנאי האחרון היינו בונים 17 שניות כל 10 דקות גם בלילה, על חשבון מכסת
+ * זמן הריצה של הסקריפט.
+ */
+function refreshDataCache() {
+  const cache = CacheService.getScriptCache();
+  const has = cache.get(DATA_CACHE.PREFIX + 'n');
+  const dirty = cache.get(DATA_CACHE.PREFIX + 'dirty');
+  const used = cache.get(DATA_CACHE.PREFIX + 'used');
+  const stale = apiDataAge_(cache) > DATA_CACHE.MAX_AGE;
+  if (!has && !used) return;                       // אין עותק ואף אחד לא נכנס – שהראשון יבנה
+  if (dirty || !has || (stale && used)) apiRefreshDataCache_();
+}
+
+/** מצב מטמון הנתונים – למסך "חיבור לגיליון" ולבדיקה מהעורך. */
+function apiDataCacheStatus_() {
+  const out = { warm: false, ageSec: null, dirty: false, trigger: false };
+  try {
+    const cache = CacheService.getScriptCache();
+    out.warm = !!cache.get(DATA_CACHE.PREFIX + 'n');
+    const age = apiDataAge_(cache);
+    out.ageSec = age > 1e8 ? null : Math.round(age);
+    out.dirty = !!cache.get(DATA_CACHE.PREFIX + 'dirty');
+  } catch (err) { /* ממשיכים בלי */ }
+  try {
+    out.trigger = ScriptApp.getProjectTriggers().some(function (t) { return t.getHandlerFunction() === 'refreshDataCache'; });
+  } catch (err) { /* אין הרשאה לקרוא טריגרים */ }
+  return out;
+}
+
+/**
+ * בדיקה: מי מחזיק את מטמון הנתונים חם — להרצה מהעורך.
+ * זו הבדיקה שמסבירה "למה האפליקציה נפתחת לאט": בלי הטריגר, המשתמש הבא
+ * אחרי כל כתיבה משלם את הבנייה המלאה.
+ */
+function testDataTriggers() {
+  const st = apiDataCacheStatus_();
+  Logger.log('עותק שמור: ' + (st.warm ? 'יש' : '❌ אין'));
+  Logger.log('גיל העותק: ' + (st.ageSec === null ? 'לא ידוע' : st.ageSec + ' שניות'));
+  Logger.log('ממתין לבנייה מחדש: ' + (st.dirty ? 'כן' : 'לא'));
+  if (!st.trigger) { Logger.log('❌ טריגר הרענון אינו מותקן — הרץ installDataCacheTrigger פעם אחת.'); return; }
+  Logger.log('✅ טריגר הרענון מותקן (כל 5 דקות). אף בקשה של משתמש לא בונה מחדש.');
+}
+
+/** ★ מריצים פעם אחת ★ מתקין את הטריגר ששומר על מטמון הנתונים חם. */
+function installDataCacheTrigger() {
+  ScriptApp.getProjectTriggers().forEach(function (t) {
+    if (t.getHandlerFunction() === 'refreshDataCache') ScriptApp.deleteTrigger(t);
+  });
+  ScriptApp.newTrigger('refreshDataCache').timeBased().everyMinutes(5).create();
+  apiRefreshDataCache_();
+  Logger.log('✅ הטריגר הותקן — מטמון הנתונים ייבנה מחדש ברקע, והאפליקציה לא תמתין לו.');
 }
 
 /** גיליון המקוואות (לפי MIKVAOT_SHEET_ID). */
@@ -335,6 +505,37 @@ function apiBuildData_() {
  * גם תא בודד או עיצוב רחוק מימין מנפח כל שורה בעשרות תאים ריקים. בלשונית
  * הפעולות, 4,080 שורות כאלה עלו בשש שניות לכל טעינה.
  */
+/**
+ * קריאת חלקים מלשונית, כשהעמודות שבאמצע אינן בשימוש.
+ * parts = [[מאיפה, עד-לא-כולל], ...] באינדקסים 0-based. השורה שמוחזרת שומרת על
+ * המיקומים המקוריים (החורים מתמלאים ב-null), כדי ש-r[85] יישאר r[85].
+ */
+function apiRowsParts_(ss, name, parts) {
+  const sh = ss.getSheetByName(name);
+  if (!sh) throw new Error('הלשונית "' + name + '" לא נמצאה בגיליון המקוואות');
+  const lastRow = sh.getLastRow();
+  const lastCol = sh.getLastColumn();
+  if (lastRow < 1 || lastCol < 1) return [];
+  const chunks = [];
+  parts.forEach(function (p) {
+    const from = p[0], to = Math.min(p[1], lastCol);
+    if (to <= from) { chunks.push({ from: from, values: null }); return; }
+    chunks.push({ from: from, values: sh.getRange(1, from + 1, lastRow, to - from).getValues() });
+  });
+  const width = parts[parts.length - 1][1];
+  const out = [];
+  for (let i = 0; i < lastRow; i++) {
+    const row = new Array(width).fill(null);
+    chunks.forEach(function (c) {
+      if (!c.values) return;
+      const src = c.values[i];
+      for (let j = 0; j < src.length; j++) row[c.from + j] = src[j];
+    });
+    out.push(row);
+  }
+  return out;
+}
+
 function apiRows_(ss, name, maxCols) {
   const sh = ss.getSheetByName(name);
   if (!sh) throw new Error('הלשונית "' + name + '" לא נמצאה בגיליון המקוואות');
@@ -399,7 +600,12 @@ function apiActions_(ss) {
  * full=true (ב-?action=inspections&mikveh=...): עם המדורים, למקווה אחד.
  */
 function apiInspections_(ss, full) {
-  const rows = apiRows_(ss, API.SHEETS.inspections, 101); // הקוד קורא עד r[100]
+  // ברשימה הקצרה נקראות רק שתי קצוות הלשונית (עמודות 1-15 ו-86-101). המדורים
+  // יושבים באמצע, 70 עמודות על 576 שורות – כארבעים אלף תאים שנקראו בכל בנייה
+  // בלי שאיש הסתכל בהם. apiRowsParts_ מחזיר שורה באותם אינדקסים בדיוק, כך
+  // ששאר הקוד אינו מבחין בהבדל.
+  const rows = full ? apiRows_(ss, API.SHEETS.inspections, 101) : apiRowsParts_(ss, API.SHEETS.inspections, [[0, 15], [85, 101]]);
+  if (!rows.length) return [];
   const hdr = rows[0].map(function (h) { return (apiClean_(h) || '').trim(); });
   const out = [];
   for (let i = 1; i < rows.length; i++) {

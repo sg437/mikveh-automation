@@ -163,6 +163,23 @@ function authSession_(ss, token) {
   return null;
 }
 
+/**
+ * סשן לפי טוקן, בלי לפתוח את הגיליון כשאין צורך.
+ *
+ * ?action=data מוגש מהמטמון תוך מאות אלפיות שנייה, ופתיחת הגיליון רק כדי
+ * לזהות את המשתמש הייתה מוסיפה לו שנייה ויותר בכל בקשה. הגיליון נפתח רק
+ * כשהסשן אינו במטמון (כניסה ראשונה, או אחרי שהמטמון פג).
+ */
+function authSessionFast_(token) {
+  token = String(token || '').trim();
+  if (!token) return null;
+  try {
+    const cached = CacheService.getScriptCache().get('sess_' + token);
+    if (cached) return JSON.parse(cached);
+  } catch (e) { /* מטמון פגום – ממשיכים לגיליון */ }
+  return authSession_(apiSpreadsheet_(), token);
+}
+
 function authLogout_(ss, token) {
   CacheService.getScriptCache().remove('sess_' + String(token || ''));
   const sh = ss.getSheetByName(AUTH.SESSIONS_SHEET);
