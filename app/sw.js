@@ -1,11 +1,18 @@
 /* Service worker: מטמון של קבצי האפליקציה לעבודה לא מקוונת. להעלות גרסה בכל שינוי.
    data.js (~3.6MB) אינו ברשימה בכוונה: הוא רק עותק גיבוי, והכללתו גרמה להורדה
    מחדש של 3.6MB בכל העלאת גרסה. הוא נכנס למטמון לבד אם וכאשר הוא נטען. */
-const CACHE = 'mikveh-app-v38';
+const CACHE = 'mikveh-app-v40';
+/* התשובה מהגיליון נשמרת במטמון נפרד, שאינו נמחק בהעלאת גרסה: האפליקציה
+   מציגה אותו מיד בפתיחה, לפני שהרשת עונה, ולא היה טעם שהעלאת גרסה תחזיר
+   כל אחד להמתנה מלאה בפתיחה שאחריה. */
+const DATA_CACHE = 'mikveh-data';
 const FILES = ['./', './index.html', './app.js', './forms.js', './talk.js', './work.js', './media.js', './edit.js', './setup.js', './perms.js', './projects.js', './contractor.js', './auth.js', './config.js', './hebdate.js', './manifest.json',
   './privacy.html', './terms.html', './legal.css',
   './icon-192.png', './icon-512.png', './icon-maskable-512.png', './apple-touch-icon.png',
   './talk-icon-192.png', './talk-icon-512.png', './talk-icon-maskable-512.png'];
+/* קבצי האפליקציה, ככתובות מלאות. data.js נוסף כאן אך לא ל-FILES: הוא נטען
+   רק לפי דרישה, ואין סיבה להוריד 3.6MB מראש – אבל אם כבר הורד, שיגיע מהמטמון. */
+const SHELL = FILES.concat(['./data.js']).map((f) => new URL(f, self.location).href);
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(FILES)).then(() => self.skipWaiting()));
@@ -38,7 +45,10 @@ function fromCache(cached) {
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return;
   const url = new URL(e.request.url);
-  const isShell = url.origin === self.location.origin && e.request.destination !== 'empty';
+  // סיווג מפורש ולא לפי request.destination: ל-fetch() רגיל (וכך נטענים
+  // הנתונים מהגיליון) ה-destination הוא מחרוזת ריקה, ולא 'empty' כפי שנראה
+  // מהשם – וסיווג לפי זה שלח את הנתונים למסלול של קבצי האפליקציה.
+  const isShell = e.request.mode === 'navigate' || SHELL.indexOf(url.origin + url.pathname) >= 0;
 
   if (isShell) {
     e.respondWith(
@@ -59,7 +69,7 @@ self.addEventListener('fetch', (e) => {
     fetch(e.request).then((res) => {
       if (res.ok || res.type === 'opaque') {
         const copy = res.clone();
-        caches.open(CACHE).then((c) => c.put(e.request, copy)).catch(() => {});
+        caches.open(DATA_CACHE).then((c) => c.put(e.request, copy)).catch(() => {});
       }
       return res;
     }).catch(() => caches.match(e.request).then((cached) => {

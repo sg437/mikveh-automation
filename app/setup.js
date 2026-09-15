@@ -141,7 +141,9 @@
     const el = document.getElementById('connBanner');
     if (!el) return;
     const src = source || (window.MK && MK().S.data ? MK().S.data.source : '');
-    if (src === 'live' || src === 'cached') { el.hidden = true; return; }
+    // 'saved' = העותק מהפתיחה הקודמת, שמוצג עד שהתשובה החיה מגיעה. זה מצב
+    // תקין ורגעי, ולא "לא מחובר".
+    if (src === 'live' || src === 'cached' || src === 'saved') { el.hidden = true; return; }
     el.hidden = false;
     el.innerHTML = (src === 'fallback'
       ? '<b>אין מענה מהגיליון.</b> מוצג העותק המקומי האחרון. '
