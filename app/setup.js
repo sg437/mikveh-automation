@@ -60,7 +60,13 @@
         : NO('WA_BRIDGE=1', '+ GROUP_CHAT_ID')],
       ['סקר חלוקת עבודה בוואטסאפ', p.waWorkPoll ? OK + ' <small>– מי שמסמן בסקר, המשימה נרשמת על שמו</small>'
         : NO('WA_WORK_POLL=1', '+ GROUP_CHAT_ID והרצת installWorkPollTrigger')],
-      ['מהירות הטעינה', (function () {
+      ['הפתיחה האחרונה במכשיר הזה', (function () {
+        // המספרים האמיתיים מהפתיחה הנוכחית – כדי לדעת אם ההמתנה היא השרת,
+        // הרשת או העיבוד במכשיר, במקום לנחש.
+        const t = window.MK && MK().Timing ? MK().Timing.text() : '';
+        return t ? '<span dir="rtl">' + esc(t) + '</span>' : '<small>נמדד בפתיחה הבאה</small>';
+      })()],
+      ['מטמון הנתונים בשרת', (function () {
         // מטמון הנתונים הוא ההבדל בין פתיחה של שנייה לפתיחה של 17 שניות.
         const c = d.dataCache || {};
         if (!c.trigger) return '<span class="badge bad">הטריגר חסר</span> <small>– הרץ פעם אחת <code dir="ltr">installDataCacheTrigger</code> בעורך הסקריפט; בלעדיו כל פתיחה אחרי דיווח בונה את הנתונים מחדש</small>';

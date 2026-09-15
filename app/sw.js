@@ -1,7 +1,7 @@
 /* Service worker: מטמון של קבצי האפליקציה לעבודה לא מקוונת. להעלות גרסה בכל שינוי.
    data.js (~3.6MB) אינו ברשימה בכוונה: הוא רק עותק גיבוי, והכללתו גרמה להורדה
    מחדש של 3.6MB בכל העלאת גרסה. הוא נכנס למטמון לבד אם וכאשר הוא נטען. */
-const CACHE = 'mikveh-app-v37';
+const CACHE = 'mikveh-app-v38';
 const FILES = ['./', './index.html', './app.js', './forms.js', './talk.js', './work.js', './media.js', './edit.js', './setup.js', './perms.js', './projects.js', './contractor.js', './auth.js', './config.js', './hebdate.js', './manifest.json',
   './privacy.html', './terms.html', './legal.css',
   './icon-192.png', './icon-512.png', './icon-maskable-512.png', './apple-touch-icon.png',
@@ -20,10 +20,41 @@ self.addEventListener('activate', (e) => {
   );
 });
 
-// רשת קודם, ואם אין רשת – מהמטמון (כך שעדכון נתונים תמיד מגיע כשיש חיבור).
-// תשובה מהמטמון מסומנת בכותרת X-From-Cache כדי שהאפליקציה תציג "עותק שמור".
+/** תשובה מהמטמון, מסומנת ב-X-From-Cache כדי שהאפליקציה תציג "עותק שמור". */
+function fromCache(cached) {
+  const headers = new Headers(cached.headers);
+  headers.set('X-From-Cache', '1');
+  return cached.blob().then((body) => new Response(body, { status: cached.status, statusText: cached.statusText, headers }));
+}
+
+// שתי התנהגויות שונות, כי מדובר בשני דברים שונים:
+//
+// 1. קבצי האפליקציה עצמם (index.html, app.js וכו' – כ-318KB ב-15 קבצים):
+//    **מטמון קודם**. הם משתנים רק כשמעלים גרסה, ולכן אין סיבה להמתין לרשת
+//    בכל פתיחה. במקביל נשלחת בקשה ברקע שמעדכנת את המטמון לפעם הבאה.
+//    (שינוי אמיתי ממילא מגיע דרך CACHE חדש ב-install, ולכן זה לא "תוקע" גרסה.)
+// 2. כל השאר, ובראשו ?action=data מהגיליון: **רשת קודם**, כדי שנתונים
+//    יהיו עדכניים, ומהמטמון רק כשאין רשת.
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return;
+  const url = new URL(e.request.url);
+  const isShell = url.origin === self.location.origin && e.request.destination !== 'empty';
+
+  if (isShell) {
+    e.respondWith(
+      caches.match(e.request).then((cached) => {
+        const net = fetch(e.request).then((res) => {
+          if (res.ok) caches.open(CACHE).then((c) => c.put(e.request, res.clone())).catch(() => {});
+          return res;
+        });
+        if (!cached) return net;
+        net.catch(() => {}); // רענון ברקע; כישלון רשת אינו מעניין כשיש עותק
+        return cached;
+      })
+    );
+    return;
+  }
+
   e.respondWith(
     fetch(e.request).then((res) => {
       if (res.ok || res.type === 'opaque') {
@@ -33,9 +64,7 @@ self.addEventListener('fetch', (e) => {
       return res;
     }).catch(() => caches.match(e.request).then((cached) => {
       if (!cached) return Response.error();
-      const headers = new Headers(cached.headers);
-      headers.set('X-From-Cache', '1');
-      return cached.blob().then((body) => new Response(body, { status: cached.status, statusText: cached.statusText, headers }));
+      return fromCache(cached);
     }))
   );
 });
