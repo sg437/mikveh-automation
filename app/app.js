@@ -37,12 +37,19 @@
         (t.renderMs !== undefined ? ' · בניית המסך ' + t.renderMs + 'ms' : ''));
       window.MIKVEH_TIMING = t;
     },
+    /** אירוע מאוחר (למשל: הנתונים החיים הגיעו אחרי שהעותק השמור כבר צויר) */
+    note: function (what) {
+      const ms = Math.round(HAS_PERF ? now() : now() - T_START);
+      this.set({ liveMs: ms });
+      console.log('⏱️ ' + what + ' אחרי ' + (ms / 1000).toFixed(1) + ' שניות');
+    },
     /** טקסט קצר למסך "חיבור לגיליון" */
     text: function () {
       const t = this.data;
       if (!t || t.totalMs === undefined) return '';
       const sec = (ms) => (ms / 1000).toFixed(1) + ' ש\'';
       return 'סך הכל ' + sec(t.totalMs) +
+        (t.firstFrom === 'saved' ? ' (מהעותק השמור' + (t.liveMs !== undefined ? '; הנתונים החיים אחרי ' + sec(t.liveMs) : '') + ')' : '') +
         (t.fetchMs !== undefined ? ' · המתנה לשרת ' + sec(t.fetchMs) : '') +
         (t.bytes !== undefined ? ' · ' + (t.bytes / 1048576).toFixed(2) + ' MB' : '') +
         (t.parseMs !== undefined ? ' · פענוח ' + t.parseMs + ' ms' : '') +
@@ -61,9 +68,35 @@
       return cfg.apiUrl + (cfg.apiUrl.indexOf('?') >= 0 ? '&' : '?') + 'action=' + action +
         (cfg.apiToken ? '&token=' + encodeURIComponent(cfg.apiToken) : '');
     },
-    load: function () {
+    /** כתובת הנתונים, כולל הסשן (אותה כתובת בדיוק שה-Service Worker שומר). */
+    dataUrl: function () {
       let url = this.url('data');
       if (url && window.MikvehAuth) { try { const t = MikvehAuth.token(); if (t) url += '&session=' + encodeURIComponent(t); } catch (e) { /* ignore */ } }
+      return url;
+    },
+    /**
+     * העותק מהפתיחה הקודמת, ששמור אצל ה-Service Worker.
+     *
+     * הוא מוצג מיד, לפני שהגיליון ענה, כדי שהמערכת תהיה על המסך בלי להמתין
+     * לכמה מגה-בייט. כשהתשובה החיה מגיעה היא מחליפה אותו. אין עותק (פתיחה
+     * ראשונה במכשיר, או אחרי ניקוי) – ממתינים כרגיל.
+     */
+    saved: function () {
+      const url = this.dataUrl();
+      if (!url || !window.caches) return Promise.resolve(null);
+      return caches.match(url)
+        .then((res) => (res ? res.text() : null))
+        .then((txt) => {
+          if (!txt) return null;
+          const d = JSON.parse(txt);
+          if (d.error) return null;
+          d.source = 'saved';
+          return d;
+        })
+        .catch(() => null); // מטמון פגום או חסום – פשוט ממתינים לרשת
+    },
+    load: function () {
+      const url = this.dataUrl();
       // העותק המקומי (data.js) שוקל כמה מגה־בייט ומשמש רק כגיבוי. הוא נטען
       // לפי דרישה, כדי שפתיחת האפליקציה בטלפון לא תמתין לו לפני שמשהו מוצג.
       const localCopy = () => {
@@ -1246,39 +1279,51 @@
   function rmHighlight() { $('#rmList').querySelectorAll('button[data-i]').forEach((b, i) => b.classList.toggle('sel', i === RM.sel)); }
 
   // ============================================================ הפעלה
-  // הטעינה מתחילה אחרי שכל הסקריפטים (auth.js וכו') נטענו, כדי שהסשן יישלח עם הבקשה
-  const start = () => DataSource.load().then((data) => {
-    const tRender = now();
-    buildIndexes(data);
+  //
+  // שני מסלולים במקביל:
+  //   1. העותק ששמר ה-Service Worker בפתיחה הקודמת – עולה למסך מיד.
+  //   2. התשובה החיה מהגיליון – מחליפה אותו כשהיא מגיעה.
+  // כך הפתיחה אינה ממתינה לכמה מגה-בייט לפני שרואים משהו. מי שמגיע ראשון
+  // מצייר; אם הרשת הקדימה את המטמון, העותק השמור פשוט נזרק.
+  let booted = false;
+
+  /** כל מה שתלוי בנתונים: אינדקסים, מונים, כותרת ותחתית. רץ בכל עדכון. */
+  function applyData(data) {
+    data.messages = data.messages || []; data.work = data.work || []; data.media = data.media || []; data.users = data.users || [];
+    data.groups = data.groups || []; data.reactions = data.reactions || []; data.perms = data.perms || null;
+    data.contractors = data.contractors || []; data.contractorMsgs = data.contractorMsgs || [];
+    data.projects = data.projects || []; data.projectStages = data.projectStages || {};
+    S.data = data;
+    rebuild();
     $('#navCountList').textContent = data.mikvaot.length;
     $('#navCountTasks').textContent = data.tasks.length;
     $('#navCountWa').textContent = (data.whatsapp || []).length;
     $('#navCountPlan').textContent = certRows().filter((c) => c.expired || c.days <= 92).length + drainedRows().length;
+    $('#navCountTalk').textContent = data.messages.length;
+    $('#botCountTalk').textContent = data.messages.length || '';  // נקודה אדומה על 0 היא רעש
+    $('#navCountWork').textContent = data.work.filter((w) => w.status !== 'done').length;
+    if (window.MikvehProjects) MikvehProjects.refreshNav();
     const when = data.meta && data.meta.exportedAt ? parseISO(data.meta.exportedAt) : null;
     const whenTxt = when ? when.toLocaleString('he-IL', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
     const srcTxt = data.source === 'live' ? '<span class="badge ok">מחובר לגיליון</span> ' + esc(whenTxt)
+      : data.source === 'saved' ? '<span class="badge">עותק שמור</span> מתעדכן מהגיליון…'
       : data.source === 'cached' ? '<span class="badge warn">לא מקוון</span> עותק שמור מהגיליון מ-' + esc(whenTxt)
       : data.source === 'fallback' ? '<span class="badge bad">אין חיבור לגיליון</span> עותק מקומי מ-' + esc(whenTxt)
       : '<span class="badge">עותק סטטי</span> ' + esc(whenTxt);
     $('#headMeta').innerHTML = 'היום: ' + esc(HebDate.format(new Date())) + ' · ' + srcTxt + ' <button class="btn small" id="btnReload" type="button" title="טעינה מחדש מהגיליון">רענן</button>';
     $('#btnReload').addEventListener('click', () => location.reload());
-    $('#footer').textContent = (data.source === 'live' || data.source === 'cached' ? 'מקור הנתונים: ' + (data.meta.spreadsheet || 'הגיליון החי') : 'מקור הנתונים: עותק מקומי של הגיליון') +
+    $('#footer').textContent = (data.source === 'live' || data.source === 'cached' || data.source === 'saved' ? 'מקור הנתונים: ' + (data.meta.spreadsheet || 'הגיליון החי') : 'מקור הנתונים: עותק מקומי של הגיליון') +
       ' (' + data.mikvaot.length + ' מקוואות, ' + data.actions.length + ' פעולות, ' + data.inspections.length + ' דוחות פיקוח, ' + (data.whatsapp || []).length + ' דיווחי וואטסאפ). גרסת מערכת 0.2';
     if (window.MikvehSetup) MikvehSetup.banner(data.source);
-    window.MK = { S, $, esc, hebOf, fmtDate, parseISO, badge, tel, findByName, DataSource, route, Timing, buildIndexes: rebuild, addAction, getUser, requireUser, openUserModal, toast, openReport, closeReport, pickMikveh, exportTable, uniq, fillSelect, certRows, drainedRows };
+  }
+
+  /** האזנות ואתחול מסכים – פעם אחת, בציור הראשון. */
+  function initOnce() {
     // מצב "אפליקציית דיונים" – פתיחה ישירה בדיונים, בלי שאר המסכים
     if (TALK_APP) {
       document.body.classList.add('talk-app');
       if (!location.hash || location.hash === '#/') location.hash = '#/talk';
     }
-    data.messages = data.messages || []; data.work = data.work || []; data.media = data.media || []; data.users = data.users || [];
-    data.groups = data.groups || []; data.reactions = data.reactions || []; data.perms = data.perms || null;
-    data.contractors = data.contractors || []; data.contractorMsgs = data.contractorMsgs || [];
-    $('#navCountTalk').textContent = data.messages.length;
-    $('#botCountTalk').textContent = data.messages.length || '';  // נקודה אדומה על 0 היא רעש
-    $('#navCountWork').textContent = data.work.filter((w) => w.status !== 'done').length;
-    data.projects = data.projects || []; data.projectStages = data.projectStages || {};
-    if (window.MikvehProjects) MikvehProjects.refreshNav();
     initList();
     initReport();
     initUser();
@@ -1293,14 +1338,57 @@
     Outbox.flush();
     window.addEventListener('online', () => Outbox.flush());
     window.addEventListener('hashchange', route);
-    route();
-    Timing.set({ renderMs: Math.round(now() - tRender) });
-    Timing.done();
     if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
       navigator.serviceWorker.register('sw.js').catch(() => {}); // בתיקיית talk/ נרשם ה-SW שלה (נתיב יחסי למסמך)
     }
-  }).catch((err) => {
-    document.querySelector('main').innerHTML = '<div class="empty">שגיאה בטעינת הנתונים: ' + esc(err.message) + '</div>';
-  });
+  }
+
+  /**
+   * ציור מחדש אחרי שהנתונים החיים הגיעו.
+   * לא נוגעים במסך תחת ידיו של המשתמש: טופס פתוח או שדה בהקלדה נשארים
+   * כמו שהם, והנתונים כבר מעודכנים לפעולה הבאה.
+   */
+  function refreshView() {
+    const el = document.activeElement || {};
+    const typing = ['INPUT', 'TEXTAREA', 'SELECT'].indexOf(el.tagName) >= 0;
+    if (typing || document.querySelector('.modal-bg:not([hidden])')) return;
+    const y = window.scrollY;
+    route();
+    window.scrollTo(0, y);
+  }
+
+  function draw(data) {
+    const tRender = now();
+    // חייב לקדום ל-applyData: שאר הקבצים (projects.js וכו') פונים ל-window.MK
+    // כבר בעדכון המונים, ולא רק אחרי שהמסכים אותחלו.
+    if (!window.MK) {
+      window.MK = { S, $, esc, hebOf, fmtDate, parseISO, badge, tel, findByName, DataSource, route, Timing, buildIndexes: rebuild, addAction, getUser, requireUser, openUserModal, toast, openReport, closeReport, pickMikveh, exportTable, uniq, fillSelect, certRows, drainedRows };
+    }
+    applyData(data);
+    if (!booted) {
+      booted = true;
+      initOnce();
+      route();
+      Timing.set({ renderMs: Math.round(now() - tRender), firstFrom: data.source });
+      Timing.done();
+    } else {
+      // הכניסה נבדקת רק מול תשובה חיה: MikvehAuth.init בנוי כך שסשן שפג
+      // מתנקה, ומסך הכניסה נפתח, רק כש-source הוא 'live'. בציור הראשון
+      // מהעותק השמור הוא לא יכול היה להכריע, ולכן הוא נקרא שוב כאן.
+      if (window.MikvehAuth && data.source === 'live') MikvehAuth.init();
+      refreshView();
+      Timing.note('הנתונים החיים הוחלפו');
+    }
+  }
+
+  const start = () => {
+    // שתי הבקשות יוצאות יחד; הרשת אינה ממתינה למטמון.
+    const live = DataSource.load();
+    DataSource.saved().then((saved) => { if (saved && !booted) draw(saved); });
+    return live.then(draw).catch((err) => {
+      if (booted) { console.warn('רענון הנתונים נכשל, נשאר העותק השמור:', err); return; }
+      document.querySelector('main').innerHTML = '<div class="empty">שגיאה בטעינת הנתונים: ' + esc(err.message) + '</div>';
+    });
+  };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start); else start();
 })();
