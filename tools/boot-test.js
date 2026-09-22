@@ -199,6 +199,39 @@ const check = (name, cond, extra) => {
     await ctxJ.close();
   }
 
+  console.log('\n— דף הטופס (join/) עומד בפני עצמו —');
+  {
+    const ctxF = await browser.newContext();
+    const pf = await ctxF.newPage();
+    const errsF = [];
+    pf.on('pageerror', (e) => errsF.push(String(e)));
+    await pf.addInitScript(() => {
+      localStorage.setItem('mikveh.connection', JSON.stringify({ apiUrl: 'http://localhost:8931/api-login' }));
+    });
+    const hitsBefore = hits;
+    await pf.goto('http://localhost:8931/join/index.html');
+    await pf.waitForSelector('#f', { timeout: 20000 });
+    check('הטופס נטען', !!(await pf.$('#email')));
+    check('ולא נטען ממנו שום נתון מהמערכת', hits === hitsBefore, hits - hitsBefore);
+
+    await pf.fill('#name', 'משה לוי');
+    await pf.fill('#email', 'לא-מייל');
+    await pf.fill('#phone', '0508888888');
+    await pf.click('#send');
+    check('מייל לא תקין נעצר במכשיר', /אימייל/.test(await pf.textContent('#msg')), await pf.textContent('#msg'));
+
+    await pf.fill('#email', 'moshe@gmail.com');
+    posted.length = 0;
+    await pf.click('#send');
+    await pf.waitForFunction(() => /הפרטים נשלחו/.test(document.querySelector('#box').textContent), { timeout: 10000 });
+    const sent = posted[0] || {};
+    check('נשלחה הפעולה הנכונה', sent.action === 'submitDetails', sent);
+    check('עם כל השדות', sent.data && sent.data.name === 'משה לוי' &&
+      sent.data.email === 'moshe@gmail.com' && sent.data.phone === '0508888888', sent.data);
+    check('אין שגיאות בדף הטופס', errsF.length === 0, errsF);
+    await ctxF.close();
+  }
+
   console.log('\n— מי שנכנס אך אינו מנהל: אין קישור להגדרות —');
   {
     const ctx3 = await browser.newContext();

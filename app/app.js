@@ -464,6 +464,7 @@
       if (window.MikvehAuth) MikvehAuth.renderUsersView(); $('#view-users').classList.add('on');
     } else if (view === 'settings') {
       if (window.MikvehSetup) MikvehSetup.render();
+      if (window.MikvehJoinForm) MikvehJoinForm.render();
       if (window.MikvehAsk) MikvehAsk.render();
       if (window.MikvehPerms) MikvehPerms.render(); $('#view-settings').classList.add('on');
     } else {

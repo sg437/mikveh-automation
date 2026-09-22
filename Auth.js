@@ -369,7 +369,7 @@ function authCan_(user, action) {
   const role = user && user.role;
   if (!role) return true; // מצב ישן (ללא משתמשים)
   if (role === 'מנהל') return true;
-  if (['users', 'addUser', 'updateUser', 'setPerms', 'accessRequests', 'decideRequest'].indexOf(action) >= 0) return false;
+  if (['users', 'addUser', 'updateUser', 'setPerms', 'accessRequests', 'decideRequest', 'joinForm'].indexOf(action) >= 0) return false;
   // סגירת שאלה נשענת על אותה הרשאה כמו שליחתה (מי ששלח אותה, או מנהל)
   if (action === 'closeQuestion') action = 'askGroup';
   if (['logout', 'updateMe'].indexOf(action) >= 0) return true;

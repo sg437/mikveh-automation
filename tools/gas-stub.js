@@ -125,7 +125,15 @@ function load(files, extra) {
       },
     },
     LockService: { getScriptLock: () => ({ waitLock: () => {}, releaseLock: () => {} }) },
-    PropertiesService: { getScriptProperties: () => ({ getProperty: (k) => (sandbox.__props[k] === undefined ? null : sandbox.__props[k]), getProperties: () => Object.assign({}, sandbox.__props), setProperty: () => {} }) },
+    // setProperty כותב באמת (קוד שמדליק/מכבה מאפיין נבדק כך), אבל אינו נוגע
+    // ב-PROPS_CACHE_ — בדיוק כמו ב-Apps Script, שבו מאפיין שנכתב תוך כדי
+    // ריצה אינו משנה את מה שכבר נקרא. בדיקה שרוצה "הרצה חדשה" מאפסת אותו.
+    PropertiesService: { getScriptProperties: () => ({
+      getProperty: (k) => (sandbox.__props[k] === undefined ? null : sandbox.__props[k]),
+      getProperties: () => Object.assign({}, sandbox.__props),
+      setProperty: (k, v) => { sandbox.__props[k] = String(v); },
+      deleteProperty: (k) => { delete sandbox.__props[k]; },
+    }) },
     UrlFetchApp: { fetch: () => ({ getResponseCode: () => 200, getContentText: () => '{}' }) },
     Logger: { log: () => {} },
     Session: { getScriptTimeZone: () => 'Asia/Jerusalem' },
