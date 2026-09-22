@@ -85,6 +85,14 @@
   function render() {
     const root = document.getElementById('setupBox');
     if (!root) return;
+    // מסך החיבור שייך למנהל. קודם הוא נפתח לכל מי שפתח את הקישור — כולל
+    // כתובת הגיליון והטוקן. כשעדיין אין כניסה מוגדרת (או שאין חיבור כלל)
+    // הוא נשאר פתוח, אחרת אי אפשר יהיה לחבר את המערכת בפעם הראשונה.
+    const me = window.MikvehAuth ? MikvehAuth.me() : null;
+    if (window.MikvehAuth && MikvehAuth.enabled() && (!me || me.role !== 'מנהל')) {
+      root.innerHTML = '<div class="empty">מסך זה למנהלים בלבד.</div>';
+      return;
+    }
     const cfg = current(), sv = saved();
     const src = window.MK && MK().S.data ? MK().S.data.source : '';
     const state = !cfg.apiUrl ? '<span class="badge bad">לא מחובר</span> – המערכת מציגה עותק לדוגמה בלבד'

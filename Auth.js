@@ -281,6 +281,7 @@ const PERM_ACTIONS = [
   { key: 'addGroup', label: 'פתיחת קבוצות דיון', def: { 'מפקח': 1 } },
   { key: 'updateGroup', label: 'עריכת קבוצות דיון', def: { 'מפקח': 1 } },
   { key: 'addWorkItems', label: 'פתיחת משימות לחלוקה', def: { 'מפקח': 1 } },
+  { key: 'askGroup', label: 'שליחת שאלה לקבוצת הוואטסאפ', def: { 'מפקח': 1 } },
   { key: 'updateWorkItem', label: 'לקיחת משימה וסימון ביצוע', def: { 'מפקח': 1, 'קבלן': 1 } },
   { key: 'updateMikveh', label: 'עריכת פרטי מקווה', def: { 'מפקח': 1 } },
   { key: 'addMikveh', label: 'הוספת מקווה חדש', def: { 'מפקח': 1 } },
@@ -366,6 +367,8 @@ function authCan_(user, action) {
   if (!role) return true; // מצב ישן (ללא משתמשים)
   if (role === 'מנהל') return true;
   if (['users', 'addUser', 'updateUser', 'setPerms'].indexOf(action) >= 0) return false;
+  // סגירת שאלה נשענת על אותה הרשאה כמו שליחתה (מי ששלח אותה, או מנהל)
+  if (action === 'closeQuestion') action = 'askGroup';
   if (['logout', 'updateMe'].indexOf(action) >= 0) return true;
   const perms = authPerms_(apiSpreadsheet_());
   if (perms[action] && perms[action][role] !== undefined) return !!perms[action][role];

@@ -184,6 +184,17 @@ function handleNotification_(data) {
     const text = extractText_(md);
     const fileData = md.fileMessageData || {};
 
+    // 6א. תשובה לשאלה ששלחנו לקבוצה (Questions.js). תשובה מצוטטת נרשמת
+    //     כתשובה בלבד ואינה נכנסת לתור הדיווחים; הודעה רגילה שנקלטה לפי
+    //     תבנית (מייל/טלפון) ממשיכה גם לתור, שלא ייבלע דיווח.
+    // typeof: אם Questions.js עדיין לא הועלה לסקריפט, קליטת ההודעות
+    // חייבת להמשיך לעבוד כרגיל ולא ליפול על פונקציה חסרה.
+    const answer = typeof askCapture_ === 'function' ? askCapture_(data, text) : null;
+    if (answer && answer.skipQueue) {
+      CacheService.getScriptCache().put('msg_' + idMessage, '1', 21600);
+      return { status: 'answer', idMessage: idMessage, question: answer.question };
+    }
+
     const row = [
       Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'dd/MM/yyyy HH:mm:ss'),
       idMessage,

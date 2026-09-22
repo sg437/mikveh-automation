@@ -797,6 +797,34 @@ tr.link:hover td{background:var(--brand-soft)}
 .um-row{display:flex;gap:6px;flex-wrap:wrap}
 .um-row input,.um-row select{flex:1;min-width:120px;padding:7px 9px;border:1px solid var(--line);border-radius:7px}
 .umenu .btn{text-align:center;text-decoration:none}
+/* --- פס ההתקנה (gate.js) --- */
+.install-bar{max-width:1180px;margin:10px auto 0;padding:0 14px}
+.ib-main{display:flex;align-items:center;gap:10px;background:var(--brand-soft);border:1px solid var(--accent-line);
+  border-radius:var(--radius);padding:10px 12px}
+.ib-main .ic{font-size:1.4rem;flex:none}
+.ib-txt{flex:1;min-width:0;display:flex;flex-direction:column}
+.ib-txt b{font-size:var(--fs-2);color:var(--brand)}
+.ib-txt small{font-size:var(--fs-0);color:var(--muted)}
+.ib-x{background:none;border:none;color:var(--muted);font-size:1rem;padding:4px 6px;flex:none}
+.ib-how{background:var(--card);border:1px solid var(--line);border-top:none;border-radius:0 0 var(--radius) var(--radius);
+  padding:10px 12px;font-size:var(--fs-2);line-height:1.6}
+@media (max-width:520px){.ib-txt small{display:none}}
+
+/* --- מסך הנעילה (gate.js) --- */
+body.locked .sidenav,body.locked .botnav,body.locked .nav-backdrop,body.locked #btnReport,
+body.locked #btnUser,body.locked .head-meta,body.locked #navToggle,body.locked #btnBack,
+body.locked #connBanner,body.locked #footer{display:none!important}
+body.locked{padding-bottom:0}
+.gate{max-width:440px;margin:6vh auto 0;background:var(--card);border:1px solid var(--line);
+  border-radius:var(--radius-lg);box-shadow:var(--shadow-2);padding:26px 22px;text-align:center}
+.gate-logo{font-size:2.6rem;line-height:1}
+.gate h2{font-size:var(--fs-5);margin-top:8px}
+.gate .gate-sub{font-size:var(--fs-1);color:var(--muted);margin-bottom:18px}
+.gate-body p{font-size:var(--fs-3);margin-bottom:14px}
+.gate-body .gate-note{font-size:var(--fs-1);color:var(--muted);line-height:1.6}
+.gate-body .btn{display:inline-flex;justify-content:center}
+.gate-body .btn.big{min-height:48px;font-size:var(--fs-4);padding:0 22px}
+.gate-settings{max-width:720px;margin:0 auto}
 </style>
 </head>
 <body>
@@ -820,6 +848,8 @@ tr.link:hover td{background:var(--brand-soft)}
     </div>
   </div>
 </header>
+
+<div class="install-bar" id="installBar" hidden></div>
 
 <div class="layout">
 <div class="nav-backdrop" id="navBackdrop"></div>
@@ -944,7 +974,7 @@ tr.link:hover td{background:var(--brand-soft)}
   <section class="view" id="view-users"></section>
 
   <!-- ===== הגדרות והרשאות ===== -->
-  <section class="view" id="view-settings"><div id="setupBox"></div><div id="permsBox"></div>
+  <section class="view" id="view-settings"><div id="setupBox"></div><div id="askBox"></div><div id="permsBox"></div>
     <p class="legal-links"><a href="../privacy.html">מדיניות פרטיות</a> · <a href="../terms.html">תנאי שימוש</a></p>
   </section>
 
@@ -1022,7 +1052,7 @@ tr.link:hover td{background:var(--brand-soft)}
       <p style="font-size:.9rem;color:var(--muted);margin-bottom:14px">נכנסים עם חשבון Google. השם יירשם אוטומטית, וכל דיווח, הודעה ושיבוץ יירשמו על שמך.</p>
       <div id="gsiButton" style="display:flex;justify-content:center;min-height:44px"></div>
       <div class="fmsg" id="loginMsg" style="margin-top:10px"></div>
-      <p style="font-size:.78rem;color:var(--muted);margin-top:14px">אפשר להמשיך לצפות בלי כניסה; כניסה נדרשת רק כדי לדווח, לדון ולקחת משימות.</p>
+      <p style="font-size:.78rem;color:var(--muted);margin-top:14px">הכניסה נדרשת לצפייה ולדיווח כאחד. רק מי שמנהל המערכת הוסיף מראש יכול להיכנס.</p>
     </div>
   </div>
 </div>
@@ -1038,7 +1068,9 @@ tr.link:hover td{background:var(--brand-soft)}
 <script src="../work.js"></script>
 <script src="../media.js"></script>
 <script src="../edit.js"></script>
+<script src="../gate.js"></script>
 <script src="../setup.js"></script>
+<script src="../ask.js"></script>
 <script src="../perms.js"></script>
 <script src="../projects.js"></script>
 <script src="../contractor.js"></script>

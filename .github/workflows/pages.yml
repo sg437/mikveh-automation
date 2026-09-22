@@ -8,7 +8,7 @@ name: פרסום האפליקציה
 on:
   push:
     branches: [main]
-    paths: ['app/**', 'tools/make_talk.py', '.github/workflows/pages.yml']
+    paths: ['app/**', 'tools/make_talk.py', 'tools/build_config.py', '.github/workflows/pages.yml']
   workflow_dispatch:
 
 permissions:
@@ -29,6 +29,15 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: actions/configure-pages@v5
+      # כתובת הגיליון נכנסת ל-app/config.js בזמן הפרסום, כדי שכל מי שפותח
+      # את הקישור יגיע למערכת המחוברת (ומשם למסך הכניסה) ולא ל"לא מחובר".
+      # ההגדרה: Settings ⇠ Secrets and variables ⇠ Actions ⇠ Variables.
+      - name: הזרקת כתובת הגיליון
+        env:
+          MIKVEH_API_URL: ${{ vars.MIKVEH_API_URL }}
+          MIKVEH_API_TOKEN: ${{ vars.MIKVEH_API_TOKEN }}
+          MIKVEH_GOOGLE_CLIENT_ID: ${{ vars.MIKVEH_GOOGLE_CLIENT_ID }}
+        run: python3 tools/build_config.py
       # אפליקציית הדיונים (app/talk/) נבנית מחדש מ-app/index.html בכל פרסום,
       # כדי שלא תישאר מאחור אחרי שינוי במסכים.
       - name: בניית אפליקציית הדיונים

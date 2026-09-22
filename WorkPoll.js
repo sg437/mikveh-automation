@@ -9,6 +9,11 @@
  * הסרת הסימון משחררת את המשימה בחזרה. אחרי שהשקט חוזר נשלחת לקבוצה
  * **הודעת סיכום**: מי לקח מה, ומה עדיין פנוי.
  *
+ * שניים על אותה אפשרות: וואטסאפ אינו יודע לנעול אפשרות שנלקחה, ובסקר עצמו
+ * זה נראה כאילו שניהם לקחו. נרשם רק הראשון, ומיד נשלחת לקבוצה הודעה —
+ * "כבר נלקח על ידי X, הסימון שלך לא נרשם" עם רשימת הפנויים (workPollAnnounce_).
+ * גם לקיחה מוכרזת מיד, כדי שכולם יראו מה תפוס לפני שהם מסמנים.
+ *
  * הפעלה:
  *   1. Script Property בשם WA_WORK_POLL עם הערך 1.
  *   2. GROUP_CHAT_ID, GREEN_ID_INSTANCE, GREEN_API_TOKEN (כמו שאר הגשר).
@@ -27,8 +32,10 @@ const WORK_POLL = {
   MAX_OPTIONS: 12,   // מגבלת וואטסאפ
   NAME_MAX: 90,      // אורך מרבי לשם אפשרות
   QUIET_MIN: 3,      // דקות שקט אחרי ההצבעה האחרונה, לפני שנשלח סיכום
+  REMIND_MIN: 360,   // אחרי שנשלח סיכום ועדיין נשארו פנויים — תזכורת רק בעוד 6 שעות
   MAX_AGE_DAYS: 45,  // סקרים ישנים מזה כבר לא נבדקים
   NONE_OPTION: 'לא לוקח',
+  FIRST_WINS: 'מי שמסמן ראשון — המשימה נרשמת עליו. סימון שני על אותה שורה לא נרשם, ונשלחת על כך הודעה.',
   OPEN: 'פתוח',
   CLOSED: 'הסתיים',
   LOG_SHEET: 'יומן סקרים',
@@ -68,6 +75,22 @@ function workPollOptionName_(name, used) {
   let out = base, n = 2;
   while (used[out]) { out = base.slice(0, WORK_POLL.NAME_MAX - 4) + ' (' + n + ')'; n++; }
   return out;
+}
+
+/**
+ * העמודה "טביעת הסיכום האחרון" מחזיקה גם את שעת השליחה ואת מה שהיה פנוי אז,
+ * כ-JSON: { s: טביעה, t: זמן, o: הפנויים }. ערך ישן (טביעה בלבד) ממשיך לעבוד.
+ */
+function workPollSummaryState_(v) {
+  const raw = String(v == null ? '' : v);
+  if (!raw) return { s: '', t: 0 };
+  if (raw.charAt(0) === '{') {
+    try {
+      const o = JSON.parse(raw);
+      return { s: String(o.s || ''), t: Number(o.t || 0), open: o.o === undefined ? null : String(o.o).split('|').filter(Boolean) };
+    } catch (err) { /* ערך ישן */ }
+  }
+  return { s: raw, t: 0, open: null };
 }
 
 function workPollParse_(v) {
@@ -138,6 +161,60 @@ function workPollSay_(text, quotedMessageId) {
   }
 }
 
+/** טביעה קצרה של טקסט — כדי לא לשלוח את אותה הודעה פעמיים. */
+function workPollHash_(text) {
+  let h = 5381;
+  for (let i = 0; i < text.length; i++) h = ((h * 33) ^ text.charCodeAt(i)) >>> 0;
+  return h.toString(36);
+}
+
+/**
+ * הודעה מיידית לקבוצה על מה שהשתנה ברגע זה.
+ *
+ * וואטסאפ אינו יודע לנעול אפשרות בסקר אחרי שמישהו סימן אותה: שניים יכולים
+ * לסמן את אותה משימה, ובסקר עצמו זה נראה כאילו שניהם לקחו אותה. המערכת
+ * רושמת רק את הראשון — וההודעה הזו אומרת את זה בקבוצה מיד, במקום שזה יתברר
+ * רק בסיכום שנשלח אחרי שלוש דקות שקט.
+ *
+ * הודעה על לקיחה נשלחת גם היא מיד, כדי שכולם יראו מה כבר תפוס לפני שהם
+ * מסמנים. אפשר לכבות אותה ב-Script Property בשם WA_POLL_ANNOUNCE עם הערך 0
+ * (הודעת "כבר נלקח" ממשיכה להישלח תמיד — היא הסיבה שהסימון לא נרשם).
+ */
+function workPollAnnounce_(pollId, map, items, took, blocked) {
+  try {
+    if (!blocked.length && (!took.length || getProp_('WA_POLL_ANNOUNCE') === '0')) return;
+    const lines = [];
+    took.forEach(function (t) { lines.push('✅ ' + t.mikveh + ' — ' + t.who); });
+    blocked.forEach(function (b) {
+      lines.push('⚠️ ' + b.mikveh + ' כבר ' + (b.done ? 'בוצע' : 'נלקח') + (b.by ? ' על ידי ' + b.by : '') + '. ' +
+        (b.who ? b.who + ', הסימון' : 'הסימון') + ' שלך לא נרשם — אפשר להסיר אותו ולבחור משימה אחרת.');
+    });
+    if (!lines.length) return;
+
+    let text = lines.join('\n');
+    if (blocked.length) {
+      const free = [];
+      Object.keys(map).forEach(function (option) {
+        const rec = items[map[option]];
+        if (rec && rec.status !== 'done' && !rec.takenBy) free.push('• ' + rec.mikveh);
+      });
+      text += '\n\n' + (free.length
+        ? '⬜ עדיין פנויים:\n' + free.slice(0, 12).join('\n') + (free.length > 12 ? '\n(ועוד ' + (free.length - 12) + ')' : '')
+        : 'כל המשימות בסקר הזה כבר חולקו.');
+    }
+
+    // אותו webhook יכול להגיע פעמיים (Green API שולח גם את ההצבעה של בעל
+    // המכשיר כהודעה יוצאת). אותה הודעה בדיוק לא נשלחת פעמיים ברצף.
+    const key = 'pollSay_' + pollId + '_' + workPollHash_(text);
+    const cache = CacheService.getScriptCache();
+    if (cache.get(key)) return;
+    cache.put(key, '1', 300);
+    workPollSay_(text, pollId);
+  } catch (err) {
+    Logger.log('workPollAnnounce_ failed: ' + err);
+  }
+}
+
 /**
  * נקרא מ-addWorkItems_ (ApiWrite.js): שולח את המקוואות שנפתחו כסקר לקבוצה.
  * מחזיר true אם נשלח סקר (ואז אין צורך בהודעת הגשר הרגילה). לא זורק שגיאה.
@@ -163,7 +240,9 @@ function workPollSend_(ss, records, typeLabel, user) {
       // סקר חייב לפחות שתי אפשרויות
       if (options.length < 2) options.push({ optionName: WORK_POLL.NONE_OPTION });
       try {
-        const pollId = waSendPoll_(chatId, title, options, true);
+        // הכותרת שנשלחת מוסיפה את כלל "הראשון תופס". בלשונית נשמרת הכותרת
+        // הנקייה, כי היא זו שמופיעה בהודעות הסיכום.
+        const pollId = waSendPoll_(chatId, title + '\n' + WORK_POLL.FIRST_WINS, options, true);
         sh.appendRow([pollId, now, chunk[0].type, title, chatId, JSON.stringify(map),
           JSON.stringify({ byVoter: {}, names: {} }), now, '', WORK_POLL.OPEN]);
         sent++;
@@ -249,15 +328,20 @@ function handlePollUpdate_(data) {
     });
 
     let applied = 0, blocked = 0, missing = 0;
+    const tookNow = [], blockedNow = [];
     changes.forEach(function (ch) {
       const rec = items[map[ch.option]];
       if (!rec) { missing++; return; } // המשימה נמחקה מ"שיבוצים" אחרי שהסקר נשלח
       const who = workPollVoter_(ss, ch.chatId, names);
       if (ch.take) {
-        if (rec.status === 'done') { blocked++; return; }
-        if (rec.takenBy && rec.takenBy !== who.name) { blocked++; return; }
+        // וואטסאפ אינו יודע לנעול אפשרות שנלקחה, ולכן שניים יכולים לסמן אותה.
+        // נרשם רק הראשון — והשני מקבל על כך הודעה מיד (workPollAnnounce_),
+        // במקום לגלות את זה רק בסיכום.
+        if (rec.status === 'done') { blocked++; blockedNow.push({ mikveh: rec.mikveh, by: rec.takenBy || '', who: who.name, done: true }); return; }
+        if (rec.takenBy && rec.takenBy !== who.name) { blocked++; blockedNow.push({ mikveh: rec.mikveh, by: rec.takenBy, who: who.name }); return; }
         if (rec.takenBy === who.name && rec.status === 'taken') return;
         updateWorkItem_(ss, { id: rec.id, status: 'taken', via: 'מהסקר בוואטסאפ' }, who);
+        tookNow.push({ mikveh: rec.mikveh, who: who.name });
       } else {
         // ביטול סימון משחרר רק משימה שהמצביע עצמו לקח ועדיין לא ביצע
         if (rec.status !== 'taken' || rec.takenBy !== who.name) return;
@@ -270,6 +354,7 @@ function handlePollUpdate_(data) {
 
     sh.getRange(rowNum, 7, 1, 2).setValues([[JSON.stringify({ byVoter: byVoter, names: names }), new Date()]]);
     if (applied) apiInvalidateData_();
+    workPollAnnounce_(String(row[0]), map, items, tookNow, blockedNow);
     const note = [];
     if (blocked) note.push(blocked + ' סימונים על משימות שכבר נלקחו');
     if (missing) note.push(missing + ' סימונים על משימות שאינן בלשונית "' + WRITE.WORK_SHEET + '" (נמחקו?)');
@@ -310,11 +395,30 @@ function workPollVoter_(ss, chatId, names) {
 /**
  * טריגר כל 5 דקות: לכל סקר פתוח שהמצב שלו השתנה (מהסקר או מהאפליקציה)
  * ושקט כבר QUIET_MIN דקות — נשלחת לקבוצה הודעת סיכום: מי לקח מה ומה נשאר.
+ *
+ * ⚠️ הארגומנט: טריגר מבוסס-זמן ב-Apps Script מעביר לפונקציה **אובייקט
+ * אירוע** ({ triggerUid, authMode, ... }). כשהפרמטר נקרא `force` ונבדק
+ * כערך אמת, כל הרצה של הטריגר הייתה "שליחה כפויה": כל בדיקות "מה השתנה
+ * מאז הסיכום הקודם" דולגו, ואותו סיכום בדיוק נשלח לקבוצה כל חמש דקות.
+ * לכן שליחה כפויה היא אך ורק `workPollSummary(true)` מפורש.
  */
-function workPollSummary(force) {
+function workPollSummary(arg) {
+  const force = arg === true;
   if (!workPollEnabled_()) { Logger.log('workPollSummary: הסקר כבוי (WA_WORK_POLL / GROUP_CHAT_ID / Green API)'); return; }
   const sheetId = getProp_(API.SHEET_ID_PROP);
   if (!sheetId) return;
+  // שתי הרצות שרצות יחד (טריגר שהאיץ את הקודמת, או שליחה ידנית תוך כדי)
+  // היו קוראות את אותה טביעה ושולחות שתיהן את אותו סיכום.
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) { Logger.log('workPollSummary: הרצה אחרת כבר שולחת סיכומים'); return; }
+  try {
+    workPollSummaryRun_(force, sheetId);
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function workPollSummaryRun_(force, sheetId) {
   const ss = SpreadsheetApp.openById(sheetId);
   const sh = ss.getSheetByName(WORK_POLL.SHEET);
   if (!sh || sh.getLastRow() < 2) return;
@@ -357,7 +461,17 @@ function workPollSummary(force) {
     if (!force && wasClosed && !open.length) return;
 
     const stamp = taken.join('|') + '#' + open.join('|');
-    if (!force && stamp === String(row[8] || '')) return; // אין מה לעדכן מאז הסיכום הקודם
+    const prev = workPollSummaryState_(row[8]);
+    if (!force) {
+      if (stamp === prev.s) return; // אין מה לעדכן מאז הסיכום הקודם
+      // סיכום כבר נשלח, ועדיין נשארו פנויים: כל לקיחה נוספת הייתה גוררת
+      // סיכום נוסף כמעט זהה. הלקיחות עצמן מוכרזות מיד (workPollAnnounce_),
+      // ולכן הסיכום הבא הוא רק כשהכל חולק, או כתזכורת אחרי REMIND_MIN.
+      // משימה ש**השתחררה** היא בשורה אחרת: היא צריכה מישהו חדש, ועליה
+      // נשלח סיכום מיד.
+      const freed = prev.open ? open.filter(function (x) { return prev.open.indexOf(x) < 0; }) : open;
+      if (open.length && prev.t && !freed.length && (now - prev.t) / 60000 < WORK_POLL.REMIND_MIN) return;
+    }
 
     let text = '📊 סיכום — ' + String(row[3] || 'תכנון עבודה') + '\n';
     text += '\n✅ נלקחו (' + taken.length + '):\n' + (taken.length ? taken.join('\n') : '—');
@@ -365,12 +479,17 @@ function workPollSummary(force) {
       open.length + '):\n' + (open.length ? open.join('\n') : '—');
     text += open.length ? '\n\nאפשר לסמן בסקר למעלה, או במערכת ➜ חלוקת עבודה.' : '\n\nהכל חולק. תודה!';
 
+    // הטביעה נרשמת **לפני** השליחה, ולא אחריה: אם ההרצה נופלת או נגמר לה
+    // הזמן בין השליחה לכתיבה (קורה ב-Apps Script), ההרצה הבאה הייתה שולחת
+    // שוב בדיוק את אותו סיכום. כישלון שליחה מחזיר את הטביעה הקודמת, כדי
+    // שההרצה הבאה תנסה שוב.
+    // נסגר כשהכל חולק, ונפתח מחדש ברגע שמשהו שוחרר
+    sh.getRange(i + 2, 9, 1, 2).setValues([[JSON.stringify({ s: stamp, t: now.getTime(), o: open.join('|') }),
+      open.length ? WORK_POLL.OPEN : WORK_POLL.CLOSED]]);
     if (workPollSay_(text, String(row[0]))) {
-      sh.getRange(i + 2, 9).setValue(stamp);
-      // נסגר כשהכל חולק, ונפתח מחדש ברגע שמשהו שוחרר
-      sh.getRange(i + 2, 10).setValue(open.length ? WORK_POLL.OPEN : WORK_POLL.CLOSED);
       Logger.log('נשלח סיכום לסקר: ' + String(row[3] || ''));
     } else {
+      sh.getRange(i + 2, 9, 1, 2).setValues([[row[8], row[9]]]);
       Logger.log('שליחת הסיכום נכשלה לסקר: ' + String(row[3] || ''));
     }
   });
