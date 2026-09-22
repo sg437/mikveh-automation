@@ -7,7 +7,7 @@
  * apiToken — אם הוגדר API_TOKEN ב-Script Properties, אותו ערך כאן.
  */
 window.MIKVEH_CONFIG = {
-  apiUrl: '',
+  apiUrl: 'https://script.google.com/macros/s/AKfycbzx0I9BeyjB1lqs8WdHP1Yvp_oGb1z9uvX2Qdl95wG1j-OzQFLiO3jWw-M5gkDOnIqh/exec',
   apiToken: '',
   // מזהה OAuth Client (Web application) מ-Google Cloud Console – לכניסה עם Google.
   // אותו ערך צריך להיות גם ב-Script Property בשם GOOGLE_CLIENT_ID. ריק = מצב "מי אני" הישן.
