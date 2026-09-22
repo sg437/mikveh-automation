@@ -74,6 +74,9 @@
     return K.DataSource.postRaw('login', { idToken }).then((res) => {
       saveSession({ token: res.token, user: res.user, expires: res.expires });
       msg.textContent = '';
+      // כניסה ממסך הנעילה: הנתונים כלל לא נטענו (השרת סירב להגיש אותם),
+      // ולכן פותחים את המערכת מחדש — עכשיו עם הסשן.
+      if (document.body.classList.contains('locked')) { location.reload(); return res.user; }
       closeLogin(); renderUserButton();
       K.toast('שלום ' + res.user.name + ' (' + roleOf(res.user.role) + ')');
       if (loginCb) { const cb = loginCb; loginCb = null; cb(res.user); }

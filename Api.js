@@ -14,6 +14,12 @@
  *   <WebApp URL>?action=whatsapp  — רק דיווחי הוואטסאפ
  *   <WebApp URL>?action=ping      — בדיקת הגדרות
  *
+ * מי רשאי לקרוא: כשמוגדר GOOGLE_CLIENT_ID (כניסה עם Google), כל קריאת
+ * נתונים מחייבת סשן תקף (?session=...) — בדיוק כמו כתיבה. בלי זה חוזר
+ * { error: 'נדרשת כניסה למערכת', code: 'login' }, והאפליקציה מציגה את מסך
+ * הכניסה במקום נתונים. REQUIRE_LOGIN=0 מחזיר את ההתנהגות הישנה (קריאה
+ * פתוחה לכל מי שיש לו את הכתובת) — לא מומלץ.
+ *
  * מבנה ה-JSON זהה ל-app/data.js (tools/export_excel.py), כך שהאפליקציה
  * עובדת אותו דבר מול קובץ סטטי ומול הגיליון החי.
  ************************************************************************/
@@ -29,6 +35,11 @@ const API = {
     plugs: '-פקקים מילוי חוזר',
   },
   WA_LIMIT: 3000, // כמה דיווחי וואטסאפ אחרונים להחזיר
+  // הנתונים עצמם. כשמוגדרת כניסה עם Google הם מוגשים רק למי שנכנס —
+  // אחרת די בקישור לאפליקציה כדי לראות את כל המאגר. ?action=public
+  // (לאתר הציבורי) ו-?action=ping (מסך החיבור) נשארים פתוחים.
+  PRIVATE_ACTIONS: ['data', 'sync', 'messages', 'whatsapp', 'inspections', 'questions'],
+  REQUIRE_LOGIN_PROP: 'REQUIRE_LOGIN',
 };
 
 // שדות כרטיס המקווה: [עמודה (0-based), מפתח, כותרת]
@@ -65,6 +76,14 @@ function apiHandle_(e, action) {
       return jsonResponse_({ error: 'unauthorized' });
     }
     if (action === 'ping') return jsonResponse_(apiPing_());
+
+    // ---- קריאת נתונים מחייבת כניסה ----
+    const user = apiUser_(e);
+    if (!user && apiRequireLogin_() && API.PRIVATE_ACTIONS.indexOf(action) >= 0) {
+      return jsonResponse_({ error: 'נדרשת כניסה למערכת', code: 'login',
+        authEnabled: true, googleClientId: getProp_('GOOGLE_CLIENT_ID') || '' });
+    }
+
     // ---- API ציבורי לאתר (בלי טוקן): רק מידע שמיועד לציבור ----
     if (action === 'public') return apiPublic_(e);
     if (action === 'whatsapp') return jsonResponse_({ whatsapp: apiWhatsapp_() });
@@ -76,6 +95,11 @@ function apiHandle_(e, action) {
       return jsonResponse_({ inspections: want ? all.filter(function (i) { return apiNorm_(i.mikveh) === want; }) : all });
     }
     if (action === 'messages') return jsonResponse_({ messages: apiMessages_(apiSpreadsheet_(), (e.parameter && e.parameter.since) || '') });
+    if (action === 'questions') {
+      // התשובות כוללות טלפונים של אנשי הקבוצה — לא מסך לכל תפקיד
+      if (authEnabled_() && (!user || ['מנהל', 'מפקח'].indexOf(user.role) < 0)) return jsonResponse_({ error: 'מסך זה למנהלים ולמפקחים' });
+      return jsonResponse_(askList_(apiSpreadsheet_()));
+    }
     if (action === 'sync') {
       const ss = apiSpreadsheet_();
       const ids = {};
@@ -91,11 +115,11 @@ function apiHandle_(e, action) {
       // הגוף הכבד מגיע מהמטמון; השדות שתלויים במשתמש נתפרים אליו בלי לפענח
       // מחדש שני מגה-בייט של JSON.
       const body = apiCachedDataJson_();
-      const tok = (e.parameter && e.parameter.session) || '';
       const extra = {
-        // authSessionFast_ נמנע מפתיחת הגיליון כשהסשן כבר במטמון: openById
-        // על גיליון בגודל הזה עולה שנייה ויותר, בדיוק במסלול שאמור להיות מיידי.
-        me: tok ? authSessionFast_(tok) : null,
+        // המשתמש כבר זוהה למעלה (apiUser_), בלי לפתוח את הגיליון כשהסשן
+        // במטמון: openById על גיליון בגודל הזה עולה שנייה ויותר, בדיוק
+        // במסלול שאמור להיות מיידי.
+        me: user,
         authEnabled: authEnabled_(),
         // ה-Client ID אינו סוד – הוא גלוי בכל דף שמציג כניסה עם Google. מסירת
         // הערך כאן חוסכת הקלדה של 72 תווים בכל מכשיר, מקור ל-invalid_client.
@@ -111,12 +135,24 @@ function apiHandle_(e, action) {
   }
 }
 
+/** האם קריאת נתונים מחייבת כניסה. */
+function apiRequireLogin_() {
+  return authEnabled_() && getProp_(API.REQUIRE_LOGIN_PROP) !== '0';
+}
+
+/** המשתמש של הסשן שבכתובת (?session=...), או null. */
+function apiUser_(e) {
+  const tok = (e && e.parameter && e.parameter.session) || '';
+  return tok ? authSessionFast_(tok) : null;
+}
+
 function apiPing_() {
   const id = getProp_(API.SHEET_ID_PROP);
   const out = { ok: true, mikvaotSheet: !!id, tokenRequired: !!getProp_(API.TOKEN_PROP), time: new Date().toISOString() };
   // מה מוגדר בסקריפט – רק "מוגדר / לא מוגדר", בלי לחשוף ערכים. משמש את מסך החיבור באפליקציה.
   out.props = {
     googleClientId: !!getProp_('GOOGLE_CLIENT_ID'),
+    requireLogin: apiRequireLogin_(),
     archiveFolder: !!getProp_('MIKVEH_ARCHIVE_FOLDER_ID'),
     waAutoActions: getProp_('WA_AUTO_ACTIONS') === '1',
     openSignup: getProp_('OPEN_SIGNUP') === '1',

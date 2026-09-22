@@ -57,6 +57,15 @@
     },
   };
 
+  /**
+   * האם ידוע שבשרת הזה אין בכלל כניסה עם Google (מצב "מי אני" הישן).
+   * נשמר מהתשובה החיה האחרונה, כדי שמשתמש ותיק בלי רשת ימשיך לראות את
+   * העותק השמור, ולא ייתקע מול מסך כניסה שאין לו למי להיכנס אליו.
+   */
+  const AUTH_FLAG = 'mikveh.authEnabled';
+  function authKnownOff() { try { return localStorage.getItem(AUTH_FLAG) === '0'; } catch (e) { return false; } }
+  function rememberAuth(on) { try { localStorage.setItem(AUTH_FLAG, on ? '1' : '0'); } catch (e) { /* ignore */ } }
+
   // ============================================================ מקור נתונים
   // חיבור חי לגיליון דרך ה-Apps Script (Api.js). אם אין כתובת או שהרשת נופלת –
   // האפליקציה ממשיכה לעבוד מקובץ data.js (עותק סטטי).
@@ -95,8 +104,16 @@
         })
         .catch(() => null); // מטמון פגום או חסום – פשוט ממתינים לרשת
     },
+    /** פתיחה מקומית (file:// או שרת בדיקה) — שם עותק ההדגמה הוא כל מה שיש. */
+    localMode: function () {
+      return location.protocol === 'file:' ||
+        ['localhost', '127.0.0.1', '[::1]', ''].indexOf(location.hostname) >= 0;
+    },
+    /** סשן שמור במכשיר (מי שכבר נכנס פעם אחת). */
+    hasSession: function () { try { return !!(window.MikvehAuth && MikvehAuth.token()); } catch (e) { return false; } },
     load: function () {
       const url = this.dataUrl();
+      const self = this;
       // העותק המקומי (data.js) שוקל כמה מגה־בייט ומשמש רק כגיבוי. הוא נטען
       // לפי דרישה, כדי שפתיחת האפליקציה בטלפון לא תמתין לו לפני שמשהו מוצג.
       const localCopy = () => {
@@ -109,12 +126,24 @@
           document.head.appendChild(sc);
         });
       };
-      const fallback = (err) => localCopy().then((local) => {
-        const d = Object.assign({}, local || { mikvaot: [], actions: [], inspections: [], tasks: [], plugs: {}, meta: {} });
+      const empty = () => ({ mikvaot: [], actions: [], inspections: [], tasks: [], plugs: {}, meta: {} });
+      const locked = (mode, extra) => Promise.resolve(Object.assign(empty(), { locked: mode, source: 'locked' }, extra || {}));
+      const copy = (err) => localCopy().then((local) => {
+        const d = Object.assign({}, local || empty());
         d.source = url ? 'fallback' : 'static';
         d.loadError = err ? err.message : '';
         return d;
       });
+      /**
+       * עותק ההדגמה הוא כל המאגר — שמות, טלפונים וכתובות של אלף מקוואות.
+       * הוא מוגש רק למי שכבר נכנס למערכת במכשיר הזה (ועכשיו אין לו רשת),
+       * או בפתיחה מקומית לפיתוח. מי שרק פתח את הקישור מקבל מסך כניסה.
+       */
+      const fallback = (err) => {
+        if (!self.config().apiUrl) return self.localMode() ? copy(err) : locked('noconn');
+        if (self.hasSession() || authKnownOff()) return copy(err);
+        return locked('offline', { loadError: err ? err.message : '' });
+      };
       if (!url) return fallback(null);
       // מדידה: כמה המתנו לשרת, כמה ירד, וכמה לקח לפענח. בלי זה אי אפשר לדעת
       // אם פתיחה איטית היא השרת, הרשת או העיבוד במכשיר. התוצאה נרשמת
@@ -125,6 +154,9 @@
         .then(([txt, cached]) => {
           const t1 = now();
           const d = JSON.parse(txt);
+          // השרת מגיש נתונים רק למי שנכנס (Api.js). אין סשן — מסך כניסה,
+          // ובשום מקרה לא נפילה לעותק המקומי.
+          if (d.code === 'login') { d.locked = 'login'; d.source = 'locked'; return Object.assign(empty(), d); }
           if (d.error) throw new Error(d.error);
           d.source = cached ? 'cached' : 'live';
           Timing.set({ fetchMs: Math.round(t1 - t0), parseMs: Math.round(now() - t1), bytes: txt.length });
@@ -136,6 +168,9 @@
     get: function (action, params) {
       let url = this.url(action);
       if (!url) return Promise.reject(new Error('אין חיבור לגיליון'));
+      // גם קריאה מזוהה: השרת מגיש את הנתונים רק למי שנכנס
+      const token = window.MikvehAuth ? MikvehAuth.token() : '';
+      if (token) url += '&session=' + encodeURIComponent(token);
       Object.keys(params || {}).forEach(function (k) {
         if (params[k] !== undefined && params[k] !== null) url += '&' + k + '=' + encodeURIComponent(params[k]);
       });
@@ -429,6 +464,7 @@
       if (window.MikvehAuth) MikvehAuth.renderUsersView(); $('#view-users').classList.add('on');
     } else if (view === 'settings') {
       if (window.MikvehSetup) MikvehSetup.render();
+      if (window.MikvehAsk) MikvehAsk.render();
       if (window.MikvehPerms) MikvehPerms.render(); $('#view-settings').classList.add('on');
     } else {
       $('#view-list').classList.add('on');
@@ -1315,6 +1351,11 @@
     $('#footer').textContent = (data.source === 'live' || data.source === 'cached' || data.source === 'saved' ? 'מקור הנתונים: ' + (data.meta.spreadsheet || 'הגיליון החי') : 'מקור הנתונים: עותק מקומי של הגיליון') +
       ' (' + data.mikvaot.length + ' מקוואות, ' + data.actions.length + ' פעולות, ' + data.inspections.length + ' דוחות פיקוח, ' + (data.whatsapp || []).length + ' דיווחי וואטסאפ). גרסת מערכת 0.2';
     if (window.MikvehSetup) MikvehSetup.banner(data.source);
+    if (data.source === 'live') rememberAuth(!!data.authEnabled);
+    // מסך ההגדרות (חיבור לגיליון + טבלת ההרשאות) הוא מסך של מנהל. כל עוד
+    // לא נכנס מנהל, הקישור אינו מוצג — כך מי שפתח את הקישור לא נוחת עליו.
+    const admin = !data.authEnabled || !!(data.me && (data.me.role === 'מנהל' || data.me.role === 'admin'));
+    document.querySelectorAll('nav a[data-view="settings"]').forEach((a) => { a.hidden = !admin; });
   }
 
   /** האזנות ואתחול מסכים – פעם אחת, בציור הראשון. */
@@ -1338,12 +1379,20 @@
     Outbox.flush();
     window.addEventListener('online', () => Outbox.flush());
     window.addEventListener('hashchange', route);
-    if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
-      // updateViaCache:'none' — בלעדיו הדפדפן מגיש את sw.js עצמו ממטמון ה-HTTP
-      // (GitHub Pages: max-age=600), ואז גם גרסה חדשה לא נבדקת מיד.
-      // בתיקיית talk/ נרשם ה-SW שלה (נתיב יחסי למסמך).
-      navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).catch(() => {});
-    }
+    registerSW();
+  }
+
+  /**
+   * רישום ה-Service Worker. נקרא גם ממסך הנעילה: בלי service worker כרום
+   * אינו רואה באתר אפליקציה הניתנת להתקנה, ומי שקיבל את הקישור ועוד לא נכנס
+   * לא היה מקבל את חלון ההתקנה.
+   */
+  function registerSW() {
+    if (!('serviceWorker' in navigator) || !location.protocol.startsWith('http')) return;
+    // updateViaCache:'none' — בלעדיו הדפדפן מגיש את sw.js עצמו ממטמון ה-HTTP
+    // (GitHub Pages: max-age=600), ואז גם גרסה חדשה לא נבדקת מיד.
+    // בתיקיית talk/ נרשם ה-SW שלה (נתיב יחסי למסמך).
+    navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).catch(() => {});
   }
 
   /**
@@ -1366,6 +1415,20 @@
     // כבר בעדכון המונים, ולא רק אחרי שהמסכים אותחלו.
     if (!window.MK) {
       window.MK = { S, $, esc, hebOf, fmtDate, parseISO, badge, tel, findByName, DataSource, route, Timing, buildIndexes: rebuild, addAction, getUser, requireUser, openUserModal, toast, openReport, closeReport, pickMikveh, exportTable, uniq, fillSelect, certRows, drainedRows };
+    }
+    // מסך נעילה: אין כניסה, אין חיבור, או אין רשת ואין סשן. לא מציירים
+    // שום מסך של המערכת — גם לא את ההגדרות.
+    if (data.locked) {
+      // "אין רשת" אחרי שהמסך כבר עלה מהעותק השמור אינו סיבה לנעול אותו
+      if (data.locked === 'offline' && booted) { Timing.note('רענון נכשל — נשאר העותק שעל המסך'); return; }
+      S.data = Object.assign(S.data || {}, data);
+      booted = true;
+      registerSW();
+      window.addEventListener('hashchange', () => { if (window.MikvehGate) MikvehGate.show(data.locked, data); });
+      if (window.MikvehGate) MikvehGate.show(data.locked, data);
+      Timing.set({ renderMs: Math.round(now() - tRender), firstFrom: 'locked' });
+      Timing.done();
+      return;
     }
     applyData(data);
     if (!booted) {
