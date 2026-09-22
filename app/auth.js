@@ -68,8 +68,10 @@
   }
   function closeLogin() { MK().$('#loginModal').hidden = true; }
 
+  let lastIdToken = '';
   function loginWithToken(idToken) {
     const K = MK();
+    lastIdToken = idToken; // נשמר לבקשת גישה, שנשלחת עם אותה זהות מאומתת
     const msg = K.$('#loginMsg'); msg.textContent = 'מאמת מול Google...'; msg.className = 'fmsg';
     return K.DataSource.postRaw('login', { idToken }).then((res) => {
       saveSession({ token: res.token, user: res.user, expires: res.expires });
@@ -81,7 +83,54 @@
       K.toast('שלום ' + res.user.name + ' (' + roleOf(res.user.role) + ')');
       if (loginCb) { const cb = loginCb; loginCb = null; cb(res.user); }
       return res.user;
-    }).catch((err) => { msg.textContent = 'הכניסה נכשלה: ' + err.message; msg.className = 'fmsg bad'; throw err; });
+    }).catch((err) => {
+      // מי שנכנס עם Google ואינו רשום — לא מבוי סתום אלא בקשת גישה
+      if (err.code === 'norequest') {
+        msg.textContent = '';
+        closeLogin();
+        openJoin((err.payload && err.payload.google) || {});
+        return null;
+      }
+      msg.textContent = 'הכניסה נכשלה: ' + err.message; msg.className = 'fmsg bad'; throw err;
+    });
+  }
+
+  // ---- בקשת גישה ----
+  /**
+   * שם החשבון בגוגל אינו תמיד אומר מיהו האדם (חשבון על שם אחר, שם עסק).
+   * לכן מבקשים גם שם מלא וטלפון — הטלפון הוא מה שמאפשר למנהל לזהות אותו
+   * מול קבוצת הוואטסאפ, והשרת מוסיף לבקשה את השם שמופיע שם.
+   */
+  function openJoin(g) {
+    const K = MK(), box = K.$('#joinBody');
+    K.$('#joinModal').hidden = false;
+    box.innerHTML = '<div class="join-who">' + (g.picture ? '<img class="avatar big" src="' + esc(g.picture) + '" alt="" referrerpolicy="no-referrer">' : '👤') +
+      '<div><b>' + esc(g.name || '') + '</b><small>' + esc(g.email || '') + '</small></div></div>' +
+      '<p style="font-size:.88rem;color:var(--muted);margin-bottom:12px">עדיין אין לך גישה. מלא את הפרטים, והמנהל יקבל התראה ויאשר. ' +
+      'הכתובת שלמעלה היא זו שתיכנס איתה — אין צורך להקליד אותה.</p>' +
+      '<label for="jName">שם מלא</label><input id="jName" type="text" value="' + esc(g.name || '') + '" placeholder="השם שבו מכירים אותך" style="margin-bottom:10px">' +
+      '<label for="jPhone">טלפון</label><input id="jPhone" type="tel" inputmode="tel" placeholder="05x-xxxxxxx" style="margin-bottom:10px">' +
+      '<label for="jNote">תפקיד או הערה (רשות)</label><input id="jNote" type="text" placeholder="למשל: מפקח איזור הדרום" style="margin-bottom:14px">' +
+      '<button class="btn primary" id="jSend" type="button">שליחת הבקשה</button> <span class="fmsg" id="jMsg"></span>';
+    const msg = K.$('#jMsg');
+    K.$('#jSend').addEventListener('click', () => {
+      const name = K.$('#jName').value.trim(), phone = K.$('#jPhone').value.trim(), note = K.$('#jNote').value.trim();
+      if (!name) { msg.textContent = 'חסר שם'; msg.className = 'fmsg bad'; return; }
+      if (phone.replace(/\D/g, '').length < 9) { msg.textContent = 'מספר הטלפון אינו תקין'; msg.className = 'fmsg bad'; return; }
+      msg.textContent = 'שולח...'; msg.className = 'fmsg';
+      K.$('#jSend').disabled = true;
+      K.DataSource.postRaw('requestAccess', { idToken: lastIdToken, name, phone, note })
+        .then((res) => {
+          box.innerHTML = res.status === 'exists'
+            ? '<p>החשבון שלך כבר רשום במערכת. אפשר פשוט להיכנס.</p><button class="btn primary" id="jBack" type="button">לכניסה</button>'
+            : '<p><b>הבקשה נשלחה.</b></p><p style="font-size:.9rem;color:var(--muted);margin-top:8px">המנהל קיבל התראה בוואטסאפ. ' +
+              'אחרי שיאשר תקבל הודעה, ואז אפשר להיכנס עם אותו חשבון Google.</p>' +
+              '<button class="btn" id="jBack" type="button" style="margin-top:12px">סגירה</button>';
+          const back = K.$('#jBack');
+          if (back) back.addEventListener('click', () => { K.$('#joinModal').hidden = true; if (res.status === 'exists') openLogin(null); });
+        })
+        .catch((err) => { msg.textContent = err.message; msg.className = 'fmsg bad'; K.$('#jSend').disabled = false; });
+    });
   }
 
   function logout() {
@@ -118,13 +167,75 @@
     const K = MK(), root = K.$('#view-users'), u = me();
     if (!enabled()) { root.innerHTML = '<div class="note-box">ניהול משתמשים פעיל רק כשמוגדרת כניסה עם Google (GOOGLE_CLIENT_ID).</div>'; return; }
     if (!u || u.role !== 'מנהל') { root.innerHTML = '<div class="empty">מסך זה למנהלים בלבד.</div>'; return; }
-    root.innerHTML = '<div class="toolbar"><div class="row"><div class="field grow"><label>הוספת משתמש מראש (יקבל את התפקיד כשייכנס עם Google)</label><div class="um-row"><input id="nuEmail" type="email" placeholder="אימייל (Gmail)"><input id="nuName" type="text" placeholder="שם"><input id="nuPhone" type="tel" placeholder="טלפון"><select id="nuRole">' + ROLES.map((r) => '<option' + (r === 'מפקח' ? ' selected' : '') + '>' + r + '</option>').join('') + '</select><button class="btn primary" id="nuAdd" type="button">הוספה</button></div></div></div>' +
+    root.innerHTML = '<div id="reqBox"></div>' +
+      '<div class="toolbar"><div class="row"><div class="field grow"><label>הוספת משתמש מראש (יקבל את התפקיד כשייכנס עם Google)</label><div class="um-row"><input id="nuEmail" type="email" placeholder="אימייל (Gmail)"><input id="nuName" type="text" placeholder="שם"><input id="nuPhone" type="tel" placeholder="טלפון"><select id="nuRole">' + ROLES.map((r) => '<option' + (r === 'מפקח' ? ' selected' : '') + '>' + r + '</option>').join('') + '</select><button class="btn primary" id="nuAdd" type="button">הוספה</button></div></div></div>' +
       '<div class="summary">רק מי שנוסף כאן יכול להיכנס. מי שייכנס עם Google בלי שהוסף מראש יקבל "אין לך הרשאה להיכנס למערכת" ולא יירשם כלל. הטלפון משמש להתראות אישיות בוואטסאפ, וניתן לעריכה גם כאן וגם על ידי המשתמש עצמו בתפריט שלו.</div></div><div class="tbl-wrap"><table id="usersTable"><thead><tr><th></th><th>שם</th><th>אימייל</th><th>טלפון</th><th>תפקיד</th><th>פעיל</th><th>כניסה אחרונה</th></tr></thead><tbody><tr><td colspan="7" class="empty">טוען...</td></tr></tbody></table></div>';
+    loadRequests();
     K.$('#nuAdd').addEventListener('click', () => {
       K.DataSource.post('addUser', { email: K.$('#nuEmail').value, name: K.$('#nuName').value, phone: K.$('#nuPhone').value, role: K.$('#nuRole').value })
         .then(() => { K.toast('המשתמש נוסף'); loadUsers(); }).catch((err) => K.toast('לא נוסף: ' + err.message));
     });
     loadUsers();
+
+    /**
+     * בקשות גישה (Access.js): מי שנכנס עם Google ואינו רשום ביקש להצטרף.
+     * מוצג הכל זה לצד זה — השם שהוזן, השם בוואטסאפ לפי הטלפון, ושם החשבון
+     * בגוגל — כי שם החשבון בגוגל לבדו לא תמיד אומר מיהו האדם.
+     */
+    function loadRequests() {
+      const box = K.$('#reqBox');
+      if (!box) return;
+      K.DataSource.post('accessRequests', {}).then((res) => {
+        const all = res.requests || [];
+        const pending = all.filter((r) => r.status === 'ממתינה');
+        const done = all.filter((r) => r.status !== 'ממתינה').slice(0, 5);
+        if (!all.length) { box.innerHTML = ''; return; }
+        box.innerHTML = '<div class="panel" style="margin-bottom:14px"><h3>בקשות גישה' +
+          (pending.length ? ' <span class="badge warn">' + pending.length + ' ממתינות</span>' : '') + '</h3>' +
+          (pending.length ? pending.map(reqCard).join('') : '<div class="hint">אין בקשות ממתינות.</div>') +
+          (done.length ? '<details style="margin-top:8px"><summary style="cursor:pointer;font-size:.85rem;color:var(--muted)">בקשות שטופלו (' + done.length + ')</summary>' +
+            done.map(reqCard).join('') + '</details>' : '') + '</div>';
+        box.querySelectorAll('[data-req]').forEach((card) => {
+          const id = card.dataset.req;
+          card.querySelectorAll('[data-decide]').forEach((b) => b.addEventListener('click', () => {
+            const approve = b.dataset.decide === 'yes';
+            const name = card.querySelector('[data-f="name"]');
+            const role = card.querySelector('[data-f="role"]');
+            if (!approve && !window.confirm('לדחות את הבקשה? אפשר לאשר אותה מאוחר יותר אם היא תוגש שוב.')) return;
+            card.querySelectorAll('button').forEach((x) => { x.disabled = true; });
+            K.DataSource.post('decideRequest', { id, approve, name: name ? name.value : undefined, role: role ? role.value : undefined })
+              .then(() => { K.toast(approve ? 'הבקשה אושרה והמשתמש נוצר' : 'הבקשה נדחתה'); loadRequests(); loadUsers(); })
+              .catch((err) => { card.querySelectorAll('button').forEach((x) => { x.disabled = false; }); K.toast('לא נשמר: ' + err.message); });
+          }));
+        });
+      }).catch(() => { box.innerHTML = ''; });
+    }
+
+    function reqCard(r) {
+      const pending = r.status === 'ממתינה';
+      // שם שונה בין המקורות אינו פסול, אבל הוא מה שכדאי להסתכל עליו לפני אישור
+      const diff = (a, b) => (a && b && a.trim() !== b.trim());
+      const row = (label, value, warn) => value ? '<div><dt>' + label + '</dt><dd' + (warn ? ' class="mismatch"' : '') + '>' + esc(value) + '</dd></div>' : '';
+      return '<div class="req ' + (pending ? 'pending' : 'done') + '" data-req="' + esc(r.id) + '">' +
+        '<h4>' + (r.picture ? '<img class="avatar" src="' + esc(r.picture) + '" alt="" referrerpolicy="no-referrer">' : '👤') +
+        esc(r.name) + (pending ? '' : ' <span class="badge">' + esc(r.status) + '</span>') + '</h4>' +
+        '<div class="dl">' +
+        row('בוואטסאפ', r.waName || '(הטלפון לא נמצא בהודעות הקבוצה)', diff(r.waName, r.name)) +
+        row('טלפון', r.phone) +
+        row('אימייל', r.email) +
+        row('שם בגוגל', r.googleName, diff(r.googleName, r.name)) +
+        row('הערה', r.note) +
+        row('נשלחה', K.hebOf(r.ts) + ' ' + K.fmtDate(r.ts)) +
+        (r.decidedBy ? row('טופל ע"י', r.decidedBy) : '') +
+        '</div>' +
+        (pending ? '<div class="req-act">' +
+          '<input class="cell-input" data-f="name" value="' + esc(r.name) + '" title="השם שיירשם במערכת">' +
+          '<select data-f="role">' + ROLES.filter((x) => x !== 'מנהל').map((x) => '<option' + (x === 'מפקח' ? ' selected' : '') + '>' + x + '</option>').join('') + '</select>' +
+          '<button class="btn small primary" data-decide="yes" type="button">אישור</button>' +
+          '<button class="btn small danger" data-decide="no" type="button">דחייה</button>' +
+        '</div>' : '') + '</div>';
+    }
+
     function loadUsers() {
       K.DataSource.post('users', {}).then((res) => {
         const tb = root.querySelector('#usersTable tbody');
@@ -142,8 +253,18 @@
     }
   }
 
+  // כפתורי ה-✕ של חלון הכניסה ושל חלון בקשת הגישה. נקשרים כאן ולא ב-initOnce
+  // של app.js, כי במסך הנעילה initOnce כלל אינו רץ — ואז ה-✕ של חלון הכניסה
+  // לא עשה כלום, ומי שפתח אותו נתקע מולו.
+  (function bindCloseButtons() {
+    const close = (id) => { const el = document.getElementById(id); if (el) el.hidden = true; };
+    const bind = (btn, modal) => { const b = document.getElementById(btn); if (b) b.addEventListener('click', () => close(modal)); };
+    bind('loginClose', 'loginModal');
+    bind('joinClose', 'joinModal');
+  })();
+
   window.MikvehAuth = {
-    enabled, me, session, openLogin, logout, openMenu, renderUserButton, renderUsersView, loginWithToken, roleOf,
+    enabled, me, session, openLogin, logout, openMenu, renderUserButton, renderUsersView, loginWithToken, roleOf, openJoin,
     /** נקרא מ-app.js אחרי טעינת הנתונים */
     init: function () {
       const K = MK();

@@ -825,6 +825,19 @@ body.locked{padding-bottom:0}
 .gate-body .btn{display:inline-flex;justify-content:center}
 .gate-body .btn.big{min-height:48px;font-size:var(--fs-4);padding:0 22px}
 .gate-settings{max-width:720px;margin:0 auto}
+/* --- בקשות גישה --- */
+.req{border:1px solid var(--line);border-radius:var(--radius);padding:12px;margin-bottom:10px;background:var(--card)}
+.req.pending{border-inline-start:4px solid var(--warn)}
+.req.done{opacity:.65}
+.req h4{display:flex;align-items:center;gap:8px;font-size:var(--fs-3)}
+.req .dl{margin-top:8px}
+.req .dl div{display:flex;gap:8px;font-size:var(--fs-1);padding:2px 0}
+.req .dl dt{color:var(--muted);min-width:104px;flex:none}
+.req .dl dd{font-weight:600;word-break:break-word}
+.req .mismatch{color:var(--warn-ink);background:var(--warn-soft);border-radius:6px;padding:0 6px}
+.req .req-act{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px}
+.join-who{display:flex;gap:10px;align-items:center;background:var(--brand-soft);border-radius:var(--radius);padding:10px;margin-bottom:12px}
+.join-who small{color:var(--muted);display:block}
 </style>
 </head>
 <body>
@@ -1052,8 +1065,15 @@ body.locked{padding-bottom:0}
       <p style="font-size:.9rem;color:var(--muted);margin-bottom:14px">נכנסים עם חשבון Google. השם יירשם אוטומטית, וכל דיווח, הודעה ושיבוץ יירשמו על שמך.</p>
       <div id="gsiButton" style="display:flex;justify-content:center;min-height:44px"></div>
       <div class="fmsg" id="loginMsg" style="margin-top:10px"></div>
-      <p style="font-size:.78rem;color:var(--muted);margin-top:14px">הכניסה נדרשת לצפייה ולדיווח כאחד. רק מי שמנהל המערכת הוסיף מראש יכול להיכנס.</p>
+      <p style="font-size:.78rem;color:var(--muted);margin-top:14px">הכניסה נדרשת לצפייה ולדיווח כאחד. מי שעדיין אין לו גישה יוכל לבקש אותה מיד אחרי הכניסה, והמנהל יאשר.</p>
     </div>
+  </div>
+</div>
+<!-- ===== בקשת גישה (מי שנכנס עם Google ואינו רשום) ===== -->
+<div class="modal-bg" id="joinModal" hidden>
+  <div class="modal" role="dialog" aria-labelledby="joinTitle" style="max-width:440px">
+    <div class="modal-head"><h2 id="joinTitle">בקשת גישה למערכת</h2><button class="x" id="joinClose" type="button" aria-label="סגירה">✕</button></div>
+    <div class="modal-body" id="joinBody"></div>
   </div>
 </div>
 <div class="umenu" id="userMenu" hidden></div>
