@@ -1,6 +1,6 @@
 /* בדיקות סקר חלוקת העבודה (WorkPoll.js) על קוד השרת האמיתי, דרך gas-stub. */
 const { load } = require('./gas-stub');
-const FILES = ['קוד.js', 'Api.js', 'ApiWrite.js', 'Auth.js', 'WorkPoll.js'];
+const FILES = ['קוד.js', 'Api.js', 'ApiWrite.js', 'Auth.js', 'WorkPoll.js', 'Questions.js'];
 let pass = 0, fail = 0;
 function check(name, cond, extra) {
   if (cond) { pass++; console.log('  ✓ ' + name); }
@@ -69,7 +69,8 @@ let res = run(box, 'addWorkItems_', box.__ss, { items: MIKVAOT.slice(0, 3).map((
 check('שלוש משימות נפתחו', res.ok && res.records.length === 3, res);
 check('נשלח סקר אחד', box.sent.filter((s) => s.poll).length === 1);
 let poll = box.sent.filter((s) => s.poll)[0].body;
-check('הכותרת: ' + poll.message, poll.message === 'תכנון עבודה חדש [חידוש תעודה]');
+check('הכותרת: ' + poll.message.split('\n')[0], poll.message.split('\n')[0] === 'תכנון עבודה חדש [חידוש תעודה]');
+check('הסקר אומר שהראשון תופס', /מי שמסמן ראשון/.test(poll.message));
 check('אפשרות לכל מקווה', poll.options.length === 3 && poll.options[0].optionName === MIKVAOT[0]);
 check('בחירה מרובה', poll.multipleAnswers === true);
 check('אין גם הודעת טקסט כפולה לקבוצה', box.sent.filter((s) => !s.poll).length === 0);
@@ -98,9 +99,24 @@ check('המשימה חזרה להיות פנויה', workRow(box, MIKVAOT[1])[4]
 check('מה שנשאר מסומן לא זז', workRow(box, MIKVAOT[0])[4] === 'taken');
 
 console.log('\n— משימה תפוסה אינה נגזלת —');
+box.sent.length = 0;
 res = vote(box, 'incomingMessageReceived', '972509999999@c.us', 'יוסי', 'POLL1', [MIKVAOT[0]]);
 check('הסימון נחסם', res.blocked === 1 && res.applied === 0, res);
 check('הבעלים לא השתנה', workRow(box, MIKVAOT[0])[5] === 'שמואל גולדמן');
+
+// ההודעה המיידית — כדי שהשני יידע למה הסימון שלו לא נרשם, ולא יגלה
+// את זה רק בסיכום שנשלח אחרי שלוש דקות שקט.
+let say = box.sent.filter((x) => !x.poll).map((x) => x.body.message).join('\n');
+check('נשלחה הודעה לקבוצה שהמשימה כבר נלקחה',
+  say.indexOf(MIKVAOT[0]) >= 0 && /כבר נלקח/.test(say) && /שמואל גולדמן/.test(say), say);
+check('ההודעה פונה למי שסימן', /יוסי/.test(say), say);
+check('ההודעה מצטטת את הסקר', box.sent.filter((x) => !x.poll).every((x) => x.body.quotedMessageId === 'POLL1'));
+check('ומציעה את הפנויים', new RegExp('עדיין פנויים')
+  .test(say) && say.indexOf(MIKVAOT[1]) >= 0, say);
+box.sent.length = 0;
+vote(box, 'incomingMessageReceived', '972509999999@c.us', 'יוסי', 'POLL1', [MIKVAOT[0]]);
+check('אותה הודעה אינה נשלחת שוב ברצף', box.sent.length === 0);
+
 
 console.log('\n— מצביע שאינו רשום במערכת —');
 res = vote(box, 'incomingMessageReceived', '972509999999@c.us', 'יוסי', 'POLL1', [MIKVAOT[0], MIKVAOT[1]]);
@@ -115,6 +131,26 @@ check('אותו webhook פעמיים — פעם אחת', box.handleNotification_
 res = vote(box, 'incomingMessageReceived', '972509999999@c.us', 'יוסי', 'NOT-OURS', [MIKVAOT[0]]);
 check('סקר שאינו של המערכת נדחה', res.status === 'ignored');
 check('ונרשם ביומן', rows(box, 'יומן סקרים').some((r) => /סקר שאינו של המערכת/.test(String(r[6]))));
+
+console.log('\n— לקיחה מוכרזת מיד —');
+{
+  const b2 = setup();
+  run(b2, 'addWorkItems_', b2.__ss, { items: MIKVAOT.slice(0, 3).map((m) => ({ mikveh: m, type: 'cert' })) }, USER);
+  b2.sent.length = 0;
+  vote(b2, 'incomingMessageReceived', '972509999999@c.us', 'יוסי', 'POLL1', [MIKVAOT[0]]);
+  let s2 = b2.sent.filter((x) => !x.poll).map((x) => x.body.message).join('\n');
+  check('נשלחה הודעה מי לקח מה', /✅/.test(s2) && s2.indexOf(MIKVAOT[0]) >= 0 && /יוסי/.test(s2), s2);
+
+  b2.__props.WA_POLL_ANNOUNCE = '0';
+  b2.PROPS_CACHE_ = null; // המאפיינים נקראים פעם אחת לכל "הרצה"
+  b2.sent.length = 0;
+  vote(b2, 'incomingMessageReceived', '972508888888@c.us', 'דוד', 'POLL1', [MIKVAOT[1]]);
+  check('WA_POLL_ANNOUNCE=0 מכבה את הודעת הלקיחה', b2.sent.length === 0, b2.sent);
+  b2.sent.length = 0;
+  vote(b2, 'incomingMessageReceived', '972508888888@c.us', 'דוד', 'POLL1', [MIKVAOT[1], MIKVAOT[0]]);
+  s2 = b2.sent.filter((x) => !x.poll).map((x) => x.body.message).join('\n');
+  check('אבל "כבר נלקח" נשלח גם כשהיא כבויה', /כבר נלקח/.test(s2), s2);
+}
 
 console.log('\n— הודעות רגילות לא נפגעו —');
 box = setup();
@@ -147,6 +183,68 @@ box.workPollSummary();
 check('סיכום זהה לא נשלח פעמיים', box.sent.length === 0);
 box.sendWorkPollSummaryNow();
 check('sendWorkPollSummaryNow שולח בכל מקרה', box.sent.length === 1);
+
+console.log('\n— הרצה מהטריגר אינה "שליחה כפויה" —');
+// ⚠️ הבאג שגרם לסיכום לחזור כל חמש דקות: טריגר מבוסס-זמן מעביר אובייקט
+// אירוע כארגומנט הראשון, והפרמטר `force` קיבל אותו כערך אמת.
+{
+  const bt = setup();
+  run(bt, 'addWorkItems_', bt.__ss, { items: MIKVAOT.slice(0, 3).map((m) => ({ mikveh: m, type: 'cert' })) }, USER);
+  vote(bt, 'incomingMessageReceived', '972501111111@c.us', 'שמוליק', 'POLL1', [MIKVAOT[0]]);
+  rows(bt, 'סקרי עבודה')[1][7] = new Date(Date.now() - 10 * 60000);
+  const event = { triggerUid: '123456', authMode: 'FULL' };
+  bt.sent.length = 0;
+  bt.workPollSummary(event);
+  check('הסיכום הראשון נשלח', bt.sent.length === 1, bt.sent.length);
+  bt.sent.length = 0;
+  bt.workPollSummary(event);
+  bt.workPollSummary(event);
+  bt.workPollSummary(event);
+  check('והוא אינו נשלח שוב בכל הרצת טריגר', bt.sent.length === 0, bt.sent.map((x) => x.body.message));
+  bt.workPollSummary(true);
+  check('שליחה כפויה מפורשת עדיין עובדת', bt.sent.length === 1, bt.sent.length);
+}
+
+console.log('\n— לקיחה נוספת אינה גוררת סיכום נוסף —');
+// זו הייתה התלונה: "הסיכום הגיע עוד הפעם". כל לקיחה נוספת הפיקה סיכום
+// כמעט זהה. הלקיחה עצמה מוכרזת מיד, והסיכום הבא הוא רק כשהכל חולק.
+vote(box, 'incomingMessageReceived', '972509999999@c.us', 'יוסי', 'POLL1', [MIKVAOT[1]]);
+rows(box, 'סקרי עבודה')[1][7] = new Date(Date.now() - 10 * 60000);
+box.sent.length = 0;
+box.workPollSummary();
+check('לא נשלח סיכום נוסף', box.sent.length === 0, box.sent.map((x) => x.body.message));
+
+console.log('\n— שליחה שנכשלה נשלחת שוב בהרצה הבאה —');
+{
+  const b3 = setup();
+  run(b3, 'addWorkItems_', b3.__ss, { items: MIKVAOT.slice(0, 3).map((m) => ({ mikveh: m, type: 'cert' })) }, USER);
+  vote(b3, 'incomingMessageReceived', '972501111111@c.us', 'שמוליק', 'POLL1', [MIKVAOT[0]]);
+  rows(b3, 'סקרי עבודה')[1][7] = new Date(Date.now() - 10 * 60000);
+  const ok = b3.UrlFetchApp.fetch;
+  b3.UrlFetchApp = { fetch: () => ({ getResponseCode: () => 500, getContentText: () => 'err' }) };
+  b3.workPollSummary();
+  check('הטביעה לא נשמרה אחרי כישלון', !String(rows(b3, 'סקרי עבודה')[1][8] || ''),
+    rows(b3, 'סקרי עבודה')[1][8]);
+  b3.UrlFetchApp = { fetch: ok };
+  b3.sent.length = 0;
+  b3.workPollSummary();
+  check('ההרצה הבאה שלחה', b3.sent.length === 1, b3.sent.length);
+  b3.sent.length = 0;
+  b3.workPollSummary();
+  check('ואחריה לא שוב', b3.sent.length === 0);
+}
+
+console.log('\n— שתי הרצות במקביל: רק אחת שולחת —');
+{
+  const b4 = setup();
+  run(b4, 'addWorkItems_', b4.__ss, { items: MIKVAOT.slice(0, 3).map((m) => ({ mikveh: m, type: 'cert' })) }, USER);
+  vote(b4, 'incomingMessageReceived', '972501111111@c.us', 'שמוליק', 'POLL1', [MIKVAOT[0]]);
+  rows(b4, 'סקרי עבודה')[1][7] = new Date(Date.now() - 10 * 60000);
+  b4.sent.length = 0;
+  b4.LockService = { getScriptLock: () => ({ tryLock: () => false, waitLock: () => {}, releaseLock: () => {} }) };
+  b4.workPollSummary();
+  check('הרצה שלא קיבלה את הנעילה לא שלחה', b4.sent.length === 0, b4.sent.length);
+}
 
 console.log('\n— הכל חולק: סיכום אחרון והסקר נסגר —');
 rows(box, 'שיבוצים').forEach((r) => { if (r[0] && r[4] === 'open') { r[4] = 'taken'; r[5] = 'ישראל כהן'; } });
@@ -192,7 +290,7 @@ many.forEach((it) => { const r = new Array(37).fill(''); r[0] = it.mikveh; r[4] 
 run(box, 'addWorkItems_', box.__ss, { items: many }, USER);
 const polls = box.sent.filter((s) => s.poll);
 check('שני סקרים', polls.length === 2 && polls[0].body.options.length === 12 && polls[1].body.options.length === 3);
-check('כותרות ממוספרות', /1\/2$/.test(polls[0].body.message) && /2\/2$/.test(polls[1].body.message));
+check('כותרות ממוספרות', /1\/2$/.test(polls[0].body.message.split('\n')[0]) && /2\/2$/.test(polls[1].body.message.split('\n')[0]));
 
 console.log('\n— מקווה אחד: סקר חייב שתי אפשרויות —');
 box = setup();
