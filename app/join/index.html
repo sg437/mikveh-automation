@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>רישום — מערכת כשרות המקוואות</title>
+<meta name="theme-color" content="#123C5A">
+<meta name="robots" content="noindex">
+<link rel="icon" href="../icon-192.png">
+<link rel="apple-touch-icon" href="../apple-touch-icon.png">
+<!--
+  דף עצמאי במכוון: אינו טוען את קוד המערכת ואינו קורא ממנה שום נתון.
+  כל מה שהוא יודע לעשות הוא לשלוח את מה שהוקלד כאן ל-?action=submitDetails,
+  שמוסיף שורה ל"בקשות גישה" וממתין לאישור המנהל. כך אפשר לאסוף פרטים
+  מהקבוצה לפני שהקישור למערכת עצמה נשלח לאיש.
+-->
+<style>
+:root{
+  --bg:#F4F6F8; --card:#fff; --line:#D8DEE5; --ink:#1B2430; --muted:#5B6B7C;
+  --brand:#123C5A; --brand-2:#1F5F8B; --accent:#E8C15A;
+  --ok:#2E7D46; --ok-soft:#E3F3E7; --ok-ink:#216235; --bad:#C0392B; --bad-soft:#FBE4E1;
+  --font:system-ui,-apple-system,"Segoe UI","Noto Sans Hebrew","Arial Hebrew",Arial,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+[hidden]{display:none!important}
+body{background:var(--bg);color:var(--ink);font-family:var(--font);line-height:1.5;
+  min-height:100vh;display:flex;align-items:flex-start;justify-content:center;padding:18px 14px 40px;
+  -webkit-text-size-adjust:100%}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;
+  box-shadow:0 6px 18px rgba(18,36,48,.10);width:100%;max-width:440px;overflow:hidden}
+.head{background:var(--brand);color:#fff;border-bottom:3px solid var(--accent);padding:18px 18px 16px;text-align:center}
+.head .logo{font-size:2rem;line-height:1}
+.head h1{font-size:1.05rem;font-weight:600;margin-top:6px}
+.head p{font-size:.78rem;opacity:.85;margin-top:2px}
+.body{padding:18px}
+.intro{font-size:.9rem;color:var(--muted);margin-bottom:16px}
+label{display:block;font-size:.8rem;font-weight:700;color:var(--muted);margin-bottom:4px}
+input{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:8px;font-size:16px;
+  font-family:inherit;background:#fff;margin-bottom:12px}
+input:focus{outline:3px solid var(--accent);outline-offset:1px;border-color:var(--brand-2)}
+.hint{font-size:.74rem;color:var(--muted);margin:-8px 0 12px}
+button{width:100%;min-height:48px;background:var(--brand);color:#fff;border:none;border-radius:8px;
+  font-size:1rem;font-weight:600;font-family:inherit;cursor:pointer}
+button:hover{background:var(--brand-2)}
+button:disabled{opacity:.6;cursor:default}
+.msg{margin-top:12px;font-size:.88rem;padding:10px;border-radius:8px;text-align:center}
+.msg.bad{background:var(--bad-soft);color:var(--bad)}
+.done{text-align:center;padding:10px 0}
+.done .v{font-size:2.4rem;line-height:1;color:var(--ok)}
+.done h2{font-size:1.05rem;margin:10px 0 6px}
+.done p{font-size:.88rem;color:var(--muted)}
+.foot{font-size:.72rem;color:var(--muted);text-align:center;padding:0 18px 16px}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="head">
+    <div class="logo">🕍</div>
+    <h1>מערכת כשרות המקוואות</h1>
+    <p>טהרת המשפחה</p>
+  </div>
+  <div class="body" id="box">
+    <p class="intro">כדי לפתוח לך גישה למערכת, נא למלא את הפרטים. פעם אחת בלבד, והמנהל מאשר.</p>
+    <form id="f" novalidate>
+      <label for="name">שם מלא</label>
+      <input id="name" type="text" autocomplete="name" placeholder="השם שבו מכירים אותך" required>
+      <label for="email">כתובת אימייל</label>
+      <input id="email" type="email" inputmode="email" autocomplete="email" dir="ltr" placeholder="name@gmail.com" required>
+      <p class="hint">עדיף חשבון Gmail — זו הכתובת שאיתה תיכנס למערכת.</p>
+      <label for="phone">טלפון</label>
+      <input id="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="05x-xxxxxxx" required>
+      <label for="note">תפקיד או הערה (רשות)</label>
+      <input id="note" type="text" placeholder="למשל: מפקח איזור הדרום">
+      <button type="submit" id="send">שליחה</button>
+      <div class="msg bad" id="msg" hidden></div>
+    </form>
+  </div>
+  <div class="foot">הפרטים נשמרים אצל מנהל המערכת בלבד, ואינם מועברים לאף גורם.</div>
+</div>
+
+<script src="../config.js"></script>
+<script>
+(function () {
+  'use strict';
+  var box = document.getElementById('box');
+  var msg = document.getElementById('msg');
+  var btn = document.getElementById('send');
+
+  function api() {
+    var cfg = window.MIKVEH_CONFIG || {};
+    if (!cfg.apiUrl) return null;
+    return cfg.apiUrl + (cfg.apiUrl.indexOf('?') >= 0 ? '&' : '?') + 'action=submitDetails' +
+      (cfg.apiToken ? '&token=' + encodeURIComponent(cfg.apiToken) : '');
+  }
+  function fail(text) { msg.textContent = text; msg.hidden = false; btn.disabled = false; btn.textContent = 'שליחה'; }
+  function digits(s) { return String(s || '').replace(/\D/g, ''); }
+
+  document.getElementById('f').addEventListener('submit', function (e) {
+    e.preventDefault();
+    msg.hidden = true;
+    var data = {
+      name: document.getElementById('name').value.trim(),
+      email: document.getElementById('email').value.trim(),
+      phone: document.getElementById('phone').value.trim(),
+      note: document.getElementById('note').value.trim()
+    };
+    if (!data.name) return fail('חסר שם מלא');
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(data.email)) return fail('כתובת האימייל אינה תקינה');
+    if (digits(data.phone).length < 9) return fail('מספר הטלפון אינו תקין');
+    var url = api();
+    if (!url) return fail('הטופס אינו מחובר. יש לפנות למנהל המערכת.');
+
+    btn.disabled = true; btn.textContent = 'שולח...';
+    // בלי כותרות מיוחדות: כך הבקשה נשארת "פשוטה" ואין preflight ל-Apps Script
+    fetch(url, { method: 'POST', redirect: 'follow', cache: 'no-store',
+      body: JSON.stringify({ action: 'submitDetails', data: data }) })
+      .then(function (r) { if (!r.ok) throw new Error('שגיאה ' + r.status); return r.json(); })
+      .then(function (res) {
+        if (res.error) throw new Error(res.error);
+        box.innerHTML = '<div class="done"><div class="v">✓</div>' +
+          (res.status === 'exists'
+            ? '<h2>אתה כבר רשום</h2><p>אין צורך למלא שוב.</p>'
+            : '<h2>הפרטים נשלחו</h2><p>מנהל המערכת קיבל אותם. אפשר לסגור את החלון.</p>') + '</div>';
+      })
+      .catch(function (err) { fail(err.message === 'Failed to fetch' ? 'אין חיבור לאינטרנט. נסה שוב.' : err.message); });
+  });
+})();
+</script>
+</body>
+</html>

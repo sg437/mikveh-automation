@@ -40,7 +40,8 @@ function setup() {
         }, g)) };
       }
       box.sent.push({ url: url, body: JSON.parse((opt && opt.payload) || '{}') });
-      return { getResponseCode: () => 200, getContentText: () => '{}' };
+      // Green API מחזיר idMessage על כל שליחה מוצלחת
+      return { getResponseCode: () => 200, getContentText: () => JSON.stringify({ idMessage: 'M' + box.sent.length }) };
     },
   };
   const store = {};
@@ -139,6 +140,75 @@ res = box.authLogin_(box.__ss, { idToken: token({ email: 'x@gmail.com', name: 'X
 check('והוא עדיין לא יכול להיכנס', res.code === 'norequest', res);
 box.accessRequest_(box.__ss, { idToken: token({ email: 'x@gmail.com', name: 'X' }), name: 'איקס', phone: '0521234567' });
 check('בקשה חוזרת אחרי דחייה חוזרת לממתינה', rows(box, 'בקשות גישה')[1][8] === 'ממתינה');
+
+// ===== טופס הפרטים =====
+console.log('\n— טופס הפרטים: סגור כברירת מחדל —');
+box = setup();
+res = box.accessSubmit_(box.__ss, { name: 'דוד', email: 'd@gmail.com', phone: '0521111111' });
+check('לא מקבל כשהוא סגור', /סגור/.test(res.error || ''), res);
+check('ולא נרשמה שורה', !box.__ss.getSheetByName('בקשות גישה'));
+
+console.log('\n— שליחה לקבוצה פותחת אותו —');
+box.__props.GROUP_CHAT_ID = '972544896587-1544120628@g.us';
+box.PROPS_CACHE_ = null;
+check('למנהלים בלבד', !!box.accessJoinForm_(box.__ss, { do: 'send', url: 'https://x.github.io/app/join/' }, INSPECTOR).error);
+box.sent.length = 0;
+res = box.accessJoinForm_(box.__ss, { do: 'send', url: 'https://x.github.io/app/join/' }, ADMIN);
+check('נשלח ככפתור', res.ok && res.how === 'button', res);
+const btn = box.sent.filter((x) => /sendInteractiveButtons/.test(x.url))[0];
+check('הכפתור מכיל את הקישור', btn && btn.body.buttons[0].url === 'https://x.github.io/app/join/', btn && btn.body);
+check('ושם הכפתור קצר מ-25 תווים', btn && btn.body.buttons[0].buttonText.length <= 25, btn && btn.body.buttons[0]);
+box.PROPS_CACHE_ = null;
+check('הטופס נפתח', box.accessFormOpen_() === true);
+
+console.log('\n— וואטסאפ שלא מקבל כפתורים: נשלח קישור —');
+{
+  const b3 = setup();
+  b3.__props.GROUP_CHAT_ID = '972544896587-1544120628@g.us';
+  b3.PROPS_CACHE_ = null;
+  const real = b3.UrlFetchApp.fetch;
+  b3.UrlFetchApp = { fetch: function (url, opt) {
+    if (/sendInteractiveButtons/.test(url)) return { getResponseCode: () => 400, getContentText: () => 'not allowed' };
+    return real(url, opt);
+  } };
+  const r3 = b3.accessJoinForm_(b3.__ss, { do: 'send', url: 'https://x.github.io/app/join/' }, ADMIN);
+  check('התשובה אומרת שנשלח קישור', r3.ok && r3.how === 'link', r3);
+  check('וההודעה מכילה את הקישור', b3.sent.some((x) => /join\//.test(x.body.message || '')), b3.sent.map((x) => x.body.message));
+}
+
+console.log('\n— מילוי הטופס —');
+box.sent.length = 0;
+res = box.accessSubmit_(box.__ss, { name: 'משה לוי', email: 'Moshe@Gmail.com ', phone: '050-8888888', note: 'צפון' });
+check('נקלט', res.ok && res.status === 'pending', res);
+req = rows(box, 'בקשות גישה')[1] || [];
+check('האימייל נשמר באותיות קטנות', req[4] === 'moshe@gmail.com', req);
+check('★ הוצלב השם מקבוצת הוואטסאפ', req[6] === 'מוישי בלוי - מקוואות', req);
+check('המקור מסומן "טופס"', req[12] === 'טופס', req);
+check('אין שם חשבון גוגל', req[3] === '', req);
+text = messages(box);
+check('ההתראה מציינת שזה מהטופס ושהכתובת לא אומתה', /לא אומתה/.test(text), text);
+
+console.log('\n— בדיקות קלט בטופס —');
+check('מייל לא תקין נדחה', /אימייל/.test(box.accessSubmit_(box.__ss, { name: 'א', email: 'nope', phone: '0501111111' }).error || ''));
+check('טלפון לא תקין נדחה', /טלפון/.test(box.accessSubmit_(box.__ss, { name: 'א', email: 'a@b.co', phone: '12' }).error || ''));
+check('בלי שם נדחה', /שם/.test(box.accessSubmit_(box.__ss, { name: '', email: 'a@b.co', phone: '0501111111' }).error || ''));
+check('מילוי חוזר מעדכן ולא מכפיל',
+  box.accessSubmit_(box.__ss, { name: 'משה לוי', email: 'moshe@gmail.com', phone: '0508888888' }).ok &&
+  rows(box, 'בקשות גישה').length === 2, rows(box, 'בקשות גישה').length);
+check('מי שכבר משתמש מקבל "כבר רשום"',
+  box.accessSubmit_(box.__ss, { name: 'יוסי', email: 'yossi@gmail.com', phone: '0509999999' }).status === 'exists');
+
+console.log('\n— אישור מילוי מהטופס יוצר משתמש —');
+const fid = box.accessList_(box.__ss, ADMIN).requests.filter((r) => r.email === 'moshe@gmail.com')[0].id;
+box.accessDecide_(box.__ss, { id: fid, approve: true, role: 'מפקח' }, ADMIN);
+const fu = rows(box, 'משתמשים').filter((r) => r[2] === 'moshe@gmail.com')[0] || [];
+check('המשתמש נוצר', fu[1] === 'משה לוי' && fu[4] === 'מפקח' && fu[5] === 'כן', fu);
+
+console.log('\n— סגירת הטופס —');
+res = box.accessJoinForm_(box.__ss, { do: 'close' }, ADMIN);
+box.PROPS_CACHE_ = null;
+check('נסגר', res.ok && res.open === false && box.accessFormOpen_() === false, res);
+check('ולא מקבל יותר', !!box.accessSubmit_(box.__ss, { name: 'ב', email: 'b@b.co', phone: '0505555555' }).error);
 
 console.log('\n— טלפון שאינו מוכר מהקבוצה —');
 box = setup();

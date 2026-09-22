@@ -57,6 +57,9 @@ function apiWritePost_(e, action) {
     // בקשת גישה מגיעה ממי שעדיין אינו משתמש. הזהות נלקחת מה-ID token של
     // גוגל ומאומתת מולה, בדיוק כמו בכניסה עצמה.
     if (action === 'requestAccess') return jsonResponse_(accessRequest_(ss, data));
+    // טופס הפרטים (app/join/) — עמוד עצמאי בלי כניסה, שרק מוסיף שורה
+    // ל"בקשות גישה". מקבל רק כשהטופס פתוח, והשורה אינה משתמש עד שמאשרים.
+    if (action === 'submitDetails') return jsonResponse_(accessSubmit_(ss, data));
 
     // ---- זיהוי המשתמש: סשן (כשיש משתמשים מוגדרים) או שם מהמכשיר (מצב ישן) ----
     let user;
@@ -76,6 +79,7 @@ function apiWritePost_(e, action) {
     if (['users', 'addUser', 'updateUser'].indexOf(action) >= 0) return jsonResponse_(authAdmin_(ss, action, data, user));
     if (action === 'accessRequests') return jsonResponse_(accessList_(ss, user));
     if (action === 'decideRequest') return jsonResponse_(accessDecide_(ss, data, user));
+    if (action === 'joinForm') return jsonResponse_(accessJoinForm_(ss, data, user));
 
     const lock = LockService.getScriptLock();
     lock.waitLock(20000);

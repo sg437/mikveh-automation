@@ -218,7 +218,8 @@
       const row = (label, value, warn) => value ? '<div><dt>' + label + '</dt><dd' + (warn ? ' class="mismatch"' : '') + '>' + esc(value) + '</dd></div>' : '';
       return '<div class="req ' + (pending ? 'pending' : 'done') + '" data-req="' + esc(r.id) + '">' +
         '<h4>' + (r.picture ? '<img class="avatar" src="' + esc(r.picture) + '" alt="" referrerpolicy="no-referrer">' : '👤') +
-        esc(r.name) + (pending ? '' : ' <span class="badge">' + esc(r.status) + '</span>') + '</h4>' +
+        esc(r.name) + (pending ? '' : ' <span class="badge">' + esc(r.status) + '</span>') +
+        (r.source === 'טופס' ? ' <span class="badge warn" title="הכתובת הוקלדה בטופס ולא אומתה מול גוגל">מהטופס</span>' : '') + '</h4>' +
         '<div class="dl">' +
         row('בוואטסאפ', r.waName || '(הטלפון לא נמצא בהודעות הקבוצה)', diff(r.waName, r.name)) +
         row('טלפון', r.phone) +
