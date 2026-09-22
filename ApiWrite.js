@@ -90,6 +90,8 @@ function apiWritePost_(e, action) {
       if (action === 'updateProject') return jsonResponse_(updateProject_(ss, data, user));
       if (action === 'updateProjectStage') return jsonResponse_(updateProjectStage_(ss, data, user));
       if (action === 'completeProject') return jsonResponse_(completeProject_(ss, data, user));
+      if (action === 'askGroup') return jsonResponse_(askSend_(ss, data, user));
+      if (action === 'closeQuestion') return jsonResponse_(askClose_(ss, data, user));
       if (action === 'saveContractor') return jsonResponse_(saveContractor_(ss, data, user));
       if (action === 'notifyContractor') return jsonResponse_(notifyContractor_(ss, data, user));
     } finally {
