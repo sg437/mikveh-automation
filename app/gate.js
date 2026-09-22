@@ -124,8 +124,8 @@
     } else {
       body = '<p>כדי להיכנס למערכת נדרשת כניסה עם חשבון Google.</p>' +
         '<button class="btn primary big" id="gateLogin" type="button">🔐 כניסה עם Google</button>' +
-        '<p class="gate-note">רק משתמשים שמנהל המערכת הוסיף מראש יכולים להיכנס. ' +
-        'אם אין לך הרשאה — פנה למנהל כדי שיוסיף את כתובת הג׳ימייל שלך.</p>';
+        '<p class="gate-note">אין לך עדיין גישה? היכנס עם Google — ותוכל לבקש אותה כאן. ' +
+        'המנהל מקבל התראה ומאשר, ואין צורך להקליד כתובת מייל בשום מקום.</p>';
     }
 
     main.innerHTML = '<section class="gate">' + head + '<div class="gate-body">' + body + '</div></section>';

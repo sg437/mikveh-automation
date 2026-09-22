@@ -33,11 +33,22 @@ function payload(tag, n) {
 }
 
 let hits = 0, demoHits = 0;
+const posted = [];
 const srv = http.createServer((req, res) => {
   const u = new URL(req.url, 'http://x');
   // השרת דורש כניסה (Api.js עם GOOGLE_CLIENT_ID): מי שאין לו סשן לא מקבל נתונים
   if (u.pathname === '/api-login') {
     res.setHeader('Access-Control-Allow-Origin', '*');
+    if (req.method === 'POST') { // בקשת גישה (requestAccess)
+      let body = '';
+      req.on('data', (c) => { body += c; });
+      req.on('end', () => {
+        try { posted.push(JSON.parse(body)); } catch (e) { posted.push({ raw: body }); }
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, status: 'pending' }));
+      });
+      return;
+    }
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(u.searchParams.get('session')
       ? Object.assign(payload('חי', 3), { authEnabled: true, me: { id: 'u9', name: 'מפקח', role: 'מפקח' } })
@@ -150,6 +161,42 @@ const check = (name, cond, extra) => {
     check('כפתור ההתקנה מוצג', await p2.$eval('#installBar', (el) => !el.hidden));
     check('אין שגיאות במסך הנעילה', errs2.length === 0, errs2);
     await ctx2.close();
+  }
+
+  console.log('\n— בקשת גישה ממי שאינו רשום —');
+  {
+    const ctxJ = await browser.newContext();
+    const pj = await ctxJ.newPage();
+    const errsJ = [];
+    pj.on('pageerror', (e) => errsJ.push(String(e)));
+    await pj.addInitScript(() => {
+      localStorage.setItem('mikveh.connection', JSON.stringify({ apiUrl: 'http://localhost:8931/api-login' }));
+    });
+    await pj.goto('http://localhost:8931/index.html');
+    await pj.waitForSelector('.gate', { timeout: 20000 });
+    // אותו מסלול שהכניסה פותחת כשגוגל מחזירה משתמש שאינו רשום
+    await pj.evaluate(() => MikvehAuth.openJoin({ name: 'Levi B.', email: 'new@gmail.com' }));
+    check('חלון בקשת הגישה נפתח', await pj.$eval('#joinModal', (el) => !el.hidden));
+    check('השם מגוגל מוצע מראש', (await pj.inputValue('#jName')) === 'Levi B.');
+    check('והכתובת מוצגת בלי להקליד', /new@gmail\.com/.test(await pj.textContent('#joinBody')));
+
+    await pj.fill('#jPhone', '123');
+    await pj.click('#jSend');
+    check('טלפון לא תקין נעצר במכשיר', /תקין/.test(await pj.textContent('#jMsg')), await pj.textContent('#jMsg'));
+
+    await pj.fill('#jName', 'משה לוי');
+    await pj.fill('#jPhone', '050-8888888');
+    await pj.fill('#jNote', 'מפקח איזור הצפון');
+    posted.length = 0;
+    await pj.click('#jSend');
+    await pj.waitForFunction(() => /הבקשה נשלחה/.test(document.querySelector('#joinBody').textContent), { timeout: 10000 });
+    check('הבקשה נשלחה והמסך מאשר', true);
+    const body = posted[0] || {};
+    check('נשלחה הפעולה הנכונה', body.action === 'requestAccess', body);
+    check('עם השם, הטלפון וההערה', body.data && body.data.name === 'משה לוי' &&
+      body.data.phone === '050-8888888' && body.data.note === 'מפקח איזור הצפון', body.data);
+    check('אין שגיאות במסלול הבקשה', errsJ.length === 0, errsJ);
+    await ctxJ.close();
   }
 
   console.log('\n— מי שנכנס אך אינו מנהל: אין קישור להגדרות —');

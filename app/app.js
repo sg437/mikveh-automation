@@ -198,7 +198,7 @@
       if (!navigator.onLine) return Promise.reject(new Error('אין חיבור לאינטרנט'));
       return fetch(url, { method: 'POST', redirect: 'follow', cache: 'no-store', body: JSON.stringify({ action, user: getUser(), token: token || '', data }) })
         .then((r) => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
-        .then((d) => { if (d.error) { const e = new Error(d.error); e.code = d.code; throw e; } return d; });
+        .then((d) => { if (d.error) { const e = new Error(d.error); e.code = d.code; e.payload = d; throw e; } return d; });
     }
   };
 

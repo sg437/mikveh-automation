@@ -51,9 +51,12 @@ function apiWritePost_(e, action) {
     const data = body.data || {};
     const ss = apiSpreadsheet_();
 
-    // ---- כניסה / יציאה (ללא סשן) ----
+    // ---- כניסה / יציאה / בקשת גישה (ללא סשן) ----
     if (action === 'login') return jsonResponse_(authLogin_(ss, data));
     if (action === 'logout') return jsonResponse_(authLogout_(ss, body.token));
+    // בקשת גישה מגיעה ממי שעדיין אינו משתמש. הזהות נלקחת מה-ID token של
+    // גוגל ומאומתת מולה, בדיוק כמו בכניסה עצמה.
+    if (action === 'requestAccess') return jsonResponse_(accessRequest_(ss, data));
 
     // ---- זיהוי המשתמש: סשן (כשיש משתמשים מוגדרים) או שם מהמכשיר (מצב ישן) ----
     let user;
@@ -71,6 +74,8 @@ function apiWritePost_(e, action) {
 
     if (action === 'addMedia') return jsonResponse_(addMedia_(ss, data, user)); // בלי נעילה – העלאה איטית
     if (['users', 'addUser', 'updateUser'].indexOf(action) >= 0) return jsonResponse_(authAdmin_(ss, action, data, user));
+    if (action === 'accessRequests') return jsonResponse_(accessList_(ss, user));
+    if (action === 'decideRequest') return jsonResponse_(accessDecide_(ss, data, user));
 
     const lock = LockService.getScriptLock();
     lock.waitLock(20000);

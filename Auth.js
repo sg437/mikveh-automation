@@ -112,7 +112,10 @@ function authLogin_(ss, d) {
       sh.appendRow([u.id, u.name, u.email, '', u.role, 'כן', new Date(), new Date(), u.googleId, u.picture]);
     } else if (getProp_(AUTH.OPEN_SIGNUP_PROP) !== '1') {
       // ברירת המחדל: רישום סגור. רק מי שמנהל הוסיף מראש ב"ניהול משתמשים" נכנס.
-      return { error: 'אין לך הרשאה להיכנס למערכת. פנה למנהל כדי שיוסיף את הכתובת ' + g.email + '.' };
+      // לא מבוי סתום: הלקוח מציע להגיש בקשת גישה (Access.js), והמנהל
+      // מאשר אותה במסך המשתמשים. code ו-google משמשים את המסך ההוא.
+      return { error: 'עדיין אין לך גישה למערכת. אפשר לבקש אותה מהמנהל כאן.', code: 'norequest',
+        google: { name: g.name, email: g.email, picture: g.picture } };
     } else {
       // רישום פתוח (OPEN_SIGNUP=1): כל חשבון Google נרשם לבד עם DEFAULT_ROLE.
       const wanted = authRole_(getProp_(AUTH.DEFAULT_ROLE_PROP));
@@ -366,7 +369,7 @@ function authCan_(user, action) {
   const role = user && user.role;
   if (!role) return true; // מצב ישן (ללא משתמשים)
   if (role === 'מנהל') return true;
-  if (['users', 'addUser', 'updateUser', 'setPerms'].indexOf(action) >= 0) return false;
+  if (['users', 'addUser', 'updateUser', 'setPerms', 'accessRequests', 'decideRequest'].indexOf(action) >= 0) return false;
   // סגירת שאלה נשענת על אותה הרשאה כמו שליחתה (מי ששלח אותה, או מנהל)
   if (action === 'closeQuestion') action = 'askGroup';
   if (['logout', 'updateMe'].indexOf(action) >= 0) return true;
