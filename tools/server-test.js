@@ -170,5 +170,32 @@ console.log('\n— לשונית ההרשאות: הפעולה החדשה מקבל
   check('אפשר לכבות את הפעולה החדשה', set.perms.completeProject['מפקח'] === false, set.perms.completeProject);
 }
 
+console.log('\n— מחיקת פרויקט —');
+{
+  const box = setup();
+  // המזהה הוא 8 התווים הראשונים של ה-UUID, ובמעטפת כולם מתחילים ב-uuid-000
+  let n = 0; box.Utilities.getUuid = () => (++n).toString(16).padStart(8, '0') + '-x';
+  const p = run(box, 'addProject_', { mikveh: 'אבן יהודה', mikvehMode: 'exists', markInactive: true, type: 'שיפוץ' }, INSP).record;
+  run(box, 'updateProjectStage_', { id: p.id, stage: 'plans', status: 'אושר' }, INSP);
+  run(box, 'updateProjectStage_', { id: p.id, stage: 'roof', status: 'בביצוע' }, INSP);
+  const other = run(box, 'addProject_', { mikveh: 'מקווה חדש', mikvehMode: 'new' }, ADMIN).record;
+  run(box, 'updateProjectStage_', { id: other.id, stage: 'plans', status: 'אושר' }, ADMIN);
+  const stranger = { id: 'u9', name: 'מישהו אחר', role: 'מפקח' };
+  check('מפקח שלא פתח – נחסם', /רק מי שפתח/.test(run(box, 'deleteProject_', { id: p.id }, stranger).error || ''));
+  const res = run(box, 'deleteProject_', { id: p.id, restore: true }, INSP);
+  check('מי שפתח – מוחק', res.ok === true, res.error);
+  check('שני השלבים נמחקו', res.stages === 2, res.stages);
+  check('הפרויקט ירד מהרשימה', !box.apiProjects_(box.__ss).some((x) => x.id === p.id));
+  check('השלבים של פרויקט אחר נשארו', !!(box.apiProjectStages_(box.__ss)[other.id] || {}).plans);
+  check('הפרויקט האחר נשאר', box.apiProjects_(box.__ss).some((x) => x.id === other.id));
+  check('המקווה חזר לפעיל', activity(box, 'אבן יהודה') === 'פעיל' && res.mikveh && res.mikveh.changed, activity(box, 'אבן יהודה'));
+  check('מחיקה חוזרת – לא נמצא', /לא נמצא/.test(run(box, 'deleteProject_', { id: p.id }, ADMIN).error || ''));
+
+  const q = run(box, 'addProject_', { mikveh: 'אבן יהודה', mikvehMode: 'exists', markInactive: true }, ADMIN).record;
+  run(box, 'deleteProject_', { id: q.id, restore: false }, ADMIN);
+  check('בלי restore – נשאר בשיפוץ', activity(box, 'אבן יהודה') === 'בשיפוץ');
+  check('מנהל מוחק פרויקט שפתח מישהו אחר', run(box, 'deleteProject_', { id: other.id }, ADMIN).ok === true);
+}
+
 console.log('\n' + (fail ? '❌ ' + fail + ' נכשלו, ' : '✅ ') + pass + ' עברו');
 process.exit(fail ? 1 : 0);

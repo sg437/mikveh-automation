@@ -328,10 +328,12 @@
       '<div class="ff wide"><label for="peNote">הערה</label><textarea id="peNote" rows="2">' + esc(p.note || '') + '</textarea></div>' +
       '</div><div class="factions"><button class="btn primary" type="submit">שמירה</button>' +
       '<button class="btn" type="button" id="peCancel">ביטול</button>' +
+      (canDelete(p) ? '<button class="btn danger" type="button" id="peDelete">🗑️ מחיקת הפרויקט</button>' : '') +
       '<span class="fmsg" id="peMsg"></span></div></form>';
 
     K.$('#editModal').hidden = false;
     K.$('#peCancel').addEventListener('click', () => { K.$('#editModal').hidden = true; });
+    if (K.$('#peDelete')) K.$('#peDelete').addEventListener('click', () => deleteProject(p, K.$('#peMsg')));
     K.$('#peForm').addEventListener('submit', (e) => {
       e.preventDefault();
       const msg = K.$('#peMsg');
@@ -356,6 +358,35 @@
         repaint();
       }).catch((err) => { msg.textContent = err.message; msg.className = 'fmsg bad'; });
     });
+  }
+
+  // ---------- מחיקה ----------
+  /** מנהל תמיד; מי שפתח את הפרויקט – כל עוד לא הושלם (כמו בשרת) */
+  function canDelete(p) {
+    const u = MK().getUser();
+    if (!u) return false;
+    return isAdmin() || (p.by === u.name && p.status !== 'הושלם');
+  }
+
+  function deleteProject(p, msg) {
+    const K = MK();
+    if (!window.confirm('למחוק את הפרויקט "' + p.mikveh + '" ואת הצ\'ק-ליסט שלו?\nהמחיקה סופית.')) return;
+    const m = p.mikvehId ? K.S.byId[p.mikvehId] : null;
+    // מקווה שסומן "בשיפוץ" בפתיחה – שואלים אם להחזיר אותו לפעילות
+    const restore = !!(m && m.activity === 'בשיפוץ' && p.status !== 'הושלם' &&
+      window.confirm('"' + m.name + '" מסומן "בשיפוץ". להחזיר אותו ל"פעיל"?\n(ביטול = להשאיר "בשיפוץ")'));
+    msg.textContent = 'מוחק...'; msg.className = 'fmsg';
+    K.DataSource.post('deleteProject', { id: p.id, restore }).then((res) => {
+      const list = K.S.data.projects || [];
+      const i = list.findIndex((x) => x.id === p.id);
+      if (i >= 0) list.splice(i, 1);
+      if (K.S.data.projectStages) delete K.S.data.projectStages[p.id];
+      applyMikvehResult(res.mikveh);
+      K.$('#editModal').hidden = true;
+      K.toast(res.mikveh && res.mikveh.changed ? 'הפרויקט נמחק והמקווה חזר ל"פעיל"' : 'הפרויקט נמחק');
+      refreshNav();
+      repaint();
+    }).catch((err) => { msg.textContent = err.message; msg.className = 'fmsg bad'; });
   }
 
   // ---------- אישור סיום ----------
