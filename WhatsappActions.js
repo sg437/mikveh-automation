@@ -198,8 +198,8 @@ function waReportBlocked_(waiting) {
 /** הלשוניות שהמערכת כותבת אליהן (מהוואטסאפ, מהאפליקציה ומהטריגרים) */
 function systemWriteSheets_() {
   const names = [
-    API.SHEETS.master, API.SHEETS.actions, API.SHEETS.inspections, API.SHEETS.tasks, API.SHEETS.plugs,
-    WRITE.RAW_INSPECTION_SHEET, WRITE.MESSAGES_SHEET, WRITE.GROUPS_SHEET, WRITE.CONTRACTORS_SHEET,
+    // מגיליון המקוואות: רק אלה נכתבים. "פיקוח הלכתי מערכת", המשימות והפקקים נקראים בלבד
+    API.SHEETS.master, API.SHEETS.actions, WRITE.RAW_INSPECTION_SHEET, WRITE.MESSAGES_SHEET, WRITE.GROUPS_SHEET, WRITE.CONTRACTORS_SHEET,
     WRITE.CONTRACTOR_MSGS_SHEET, WRITE.REACTIONS_SHEET, WRITE.WORK_SHEET,
     AUTH.USERS_SHEET, AUTH.SESSIONS_SHEET, AUTH.PERMS_SHEET, MEDIA.SHEET, PROJECTS.SHEET, PROJECTS.STAGES_SHEET,
     ASK.SHEET, ASK.ANSWERS_SHEET, ACCESS.SHEET, WORK_POLL.SHEET, WORK_POLL.LOG_SHEET,
