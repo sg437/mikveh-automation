@@ -193,6 +193,54 @@ function waReportBlocked_(waiting) {
     '']);
 }
 
+// ==================== שחזור: דיווחים שנכשלו לפני התיקון ====================
+
+/**
+ * ★ מריצים פעם אחת מעורך הסקריפט ★
+ * מוצא בלשונית "תור נכנס" הודעות שהפעולה שלהן לא נרשמה בתיק כי הלשונית הייתה
+ * מוגנת ("שגיאה ברישום הפעולה בתיק... מוגן"), מנתח אותן מחדש בג'מיני (התאריך
+ * היחסי – "אתמול" – לפי זמן קבלת ההודעה) ורושם בתיק. ההערה מתעדכנת, כך
+ * שהרצה חוזרת לא רושמת פעמיים. אם נעצר באמצע (מגבלת זמן) – פשוט מריצים שוב.
+ */
+function recoverBlockedWhatsappActions() {
+  const sheet = getSheet_(CONFIG.QUEUE_SHEET);
+  const last = sheet.getLastRow();
+  if (last < 2) { Logger.log('התור ריק.'); return; }
+  const rows = sheet.getRange(2, 1, last - 1, COLS.ARCHIVE_LINK).getValues();
+  const startedAt = Date.now();
+  let found = 0, done = 0, skipped = 0, failed = 0;
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    const note = String(row[COLS.NOTES - 1] || '');
+    if (note.indexOf('שגיאה ברישום הפעולה בתיק') < 0 || !waIsProtectionError_(note)) continue;
+    found++;
+    if (Date.now() - startedAt > 4.5 * 60 * 1000) { Logger.log('נעצר בגלל מגבלת הזמן – הריצו שוב להמשך.'); break; }
+    const rowNum = i + 2;
+    const base = note.split(' | ')[0];
+    try {
+      const text = String(row[COLS.TEXT - 1] || '').trim();
+      const isAudio = String(row[COLS.TYPE - 1] || '') === 'הודעה קולית';
+      const archiveLink = String(row[COLS.ARCHIVE_LINK - 1] || '');
+      const blob = isAudio && archiveLink ? safeBlobForGemini_(archiveLink) : null;
+      if (!text && !blob) { skipped++; continue; }
+      const result = analyzeWithGemini_(text, blob, parseStamp_(row[COLS.RECEIVED - 1]) || null);
+      const res = recordWhatsappAction_(row, result);
+      if (/^(נרשם בתיק|ממתין לרישום)/.test(res)) {
+        sheet.getRange(rowNum, COLS.NOTES).setValue((base + ' | ' + res + ' (שחזור)').slice(0, 400));
+        done++;
+      } else {
+        // הניתוח החוזר לא מצא פעולה לרישום (או שגיאה אחרת) – מסמנים כדי לא לחזור עליו
+        sheet.getRange(rowNum, COLS.NOTES).setValue((base + ' | שחזור: ' + (res || 'לא זוהתה פעולה לרישום')).slice(0, 400));
+        skipped++;
+      }
+    } catch (err) {
+      failed++;
+      logError_('recoverBlockedWhatsappActions שורה ' + rowNum, err, '');
+    }
+  }
+  Logger.log('נמצאו ' + found + ' | נרשמו בתיק ' + done + ' | לא נרשמו ' + skipped + ' | שגיאות ' + failed);
+}
+
 /** בדיקה ידנית מעורך הסקריפט: רושם פעולת דוגמה (רק אם WA_AUTO_ACTIONS=1). */
 function testWhatsappAction() {
   const queueRow = [];
