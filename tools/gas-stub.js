@@ -12,6 +12,7 @@ function makeSheet(name, rtl) {
     getLastRow: () => rows.length,
     getLastColumn: () => rows.reduce((m, r) => Math.max(m, r.length), 0),
     appendRow: (r) => { rows.push(r.slice()); },
+    deleteRows: (start, n) => { rows.splice(start - 1, n); },
     setFrozenRows: () => sh,
     setRightToLeft: () => sh,
     _rows: rows,

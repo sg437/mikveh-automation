@@ -389,6 +389,8 @@ function processQueue() {
         logError_('processQueue שורה ' + rowNum, err, String(row[COLS.ID_MESSAGE - 1]));
       }
     }
+    // דיווחים שלא נרשמו בתיק כי לשונית הפעולות מוגנת (WhatsappActions.js)
+    waRetryPending_();
   } finally {
     lock.releaseLock();
   }
