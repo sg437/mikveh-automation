@@ -306,5 +306,28 @@ run(box, 'addWorkItems_', box.__ss, { items: [{ mikveh: MIKVAOT[0], type: 'cert'
 check('לא נשלח סקר', box.sent.filter((s) => s.poll).length === 0);
 check('נשלחה הודעת הגשר', box.sent.some((s) => /תכנון עבודה חדש/.test(s.body.message || '')));
 
+console.log('\n— "בוצע" מוכרז בקבוצה —');
+box = setup();
+run(box, 'addWorkItems_', box.__ss, { items: [{ mikveh: MIKVAOT[0], type: 'cert' }, { mikveh: MIKVAOT[1], type: 'cert' }] }, USER);
+const wid = workRow(box, MIKVAOT[0])[0];
+const groupMsgs = () => box.sent.filter((s) => !s.poll && s.body.chatId === box.__props.GROUP_CHAT_ID);
+box.sent.length = 0;
+run(box, 'updateWorkItem_', box.__ss, { id: wid, status: 'taken' }, USER);
+check('לקיחה מהאפליקציה – בלי הכרזה חדשה', groupMsgs().length === 0, groupMsgs());
+run(box, 'updateWorkItem_', box.__ss, { id: wid, status: 'done' }, USER);
+check('בוצע – הודעה אחת לקבוצה', groupMsgs().length === 1, groupMsgs().length);
+check('ההודעה: ' + (groupMsgs()[0] || { body: {} }).body.message, /^✅ שמואל גולדמן סיים\/ה: אבן יהודה/.test((groupMsgs()[0] || { body: {} }).body.message || ''));
+run(box, 'updateWorkItem_', box.__ss, { id: wid, status: 'done', note: 'תיקון הערה' }, USER);
+check('סימון חוזר של בוצע – לא מוכרז שוב', groupMsgs().length === 1, groupMsgs().length);
+box.__props.WA_DONE_ANNOUNCE = '0'; box.PROPS_CACHE_ = null; // "הרצה חדשה" – המאפיין נקרא מחדש
+run(box, 'updateWorkItem_', box.__ss, { id: workRow(box, MIKVAOT[1])[0], status: 'done' }, USER);
+check('WA_DONE_ANNOUNCE=0 – כבוי', groupMsgs().length === 1);
+box = setup();
+box.__props.WA_WORK_POLL = '';
+box.__props.WA_BRIDGE = '';
+run(box, 'addWorkItems_', box.__ss, { items: [{ mikveh: MIKVAOT[0], type: 'cert' }] }, USER);
+run(box, 'updateWorkItem_', box.__ss, { id: workRow(box, MIKVAOT[0])[0], status: 'done' }, USER);
+check('קבוצה לא מחוברת – אין הכרזה', groupMsgs().length === 0);
+
 console.log('\n' + (fail ? '❌ ' + fail + ' נכשלו, ' : '✅ ') + pass + ' עברו');
 process.exit(fail ? 1 : 0);

@@ -422,6 +422,7 @@ function updateWorkItem_(ss, d, user) {
   const status = ['open', 'taken', 'done'].indexOf(d.status) >= 0 ? d.status : 'taken';
   const now = new Date();
   const row = sh.getRange(rowNum, 1, 1, WRITE.WORK_HEADERS.length).getValues()[0];
+  const wasDone = String(row[4]) === 'done';
   if (status === 'taken') { row[5] = user.name; row[6] = user.phone; row[7] = now; row[8] = ''; }
   if (status === 'open') { row[5] = ''; row[6] = ''; row[7] = ''; row[8] = ''; }
   if (status === 'done') { if (!row[5]) { row[5] = user.name; row[6] = user.phone; row[7] = now; } row[8] = now; }
@@ -443,7 +444,19 @@ function updateWorkItem_(ss, d, user) {
   if (rec.by && rec.by !== user.name) {
     notifyUsers_(authUsers_(ss).filter(function (u) { return u.active && u.phone && u.name === rec.by; }), text);
   }
+  if (status === 'done' && !wasDone) announceWorkDone_(text);
   return { ok: true, record: rec, message: msg.record || null };
+}
+
+/**
+ * הכרזה בקבוצת הוואטסאפ כשמשימה בוצעה – כמו ההכרזה על לקיחה מהסקר, כדי
+ * שכולם יראו מה כבר נעשה. נשלחת רק כשהקבוצה מחוברת למערכת (סקר העבודה או
+ * הגשר), ורק בפעם הראשונה שהמשימה מסומנת "בוצע". לכיבוי: WA_DONE_ANNOUNCE=0.
+ */
+function announceWorkDone_(text) {
+  if (getProp_('WA_DONE_ANNOUNCE') === '0') return;
+  if (getProp_('WA_WORK_POLL') !== '1' && getProp_('WA_BRIDGE') !== '1') return;
+  if (typeof workPollSay_ === 'function') workPollSay_(text);
 }
 
 /** כל המשימות (עד WORK_LIMIT האחרונות). */
