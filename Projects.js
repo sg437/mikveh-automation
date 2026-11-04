@@ -262,6 +262,50 @@ function updateProjectStage_(ss, d, user) {
 }
 
 /**
+ * מחיקת פרויקט (למשל פרויקט ניסיוני או שנפתח בטעות). data: {id, restore}
+ * רשאים: מנהל, או מי שפתח את הפרויקט כל עוד לא הושלם. נמחקים גם השלבים.
+ * restore: מקווה שסומן "בשיפוץ" בפתיחה חוזר ל"פעיל" (רק אם עדיין "בשיפוץ").
+ * הודעות שכבר נכתבו בדיון נשארות – הן היסטוריה.
+ */
+function deleteProject_(ss, d, user) {
+  const pid = String(d.id || '');
+  const sh = projectsSheet_(ss);
+  const last = sh.getLastRow();
+  if (!pid || last < 2) return { error: 'הפרויקט לא נמצא' };
+  const ids = sh.getRange(2, 1, last - 1, 1).getValues();
+  let rowNum = -1;
+  for (let i = 0; i < ids.length; i++) { if (String(ids[i][0]) === pid) { rowNum = i + 2; break; } }
+  if (rowNum < 0) return { error: 'הפרויקט לא נמצא' };
+  const row = sh.getRange(rowNum, 1, 1, PROJECTS.HEADERS.length).getValues()[0];
+  const rec = projectRecord_(row);
+  if (user.role && user.role !== 'מנהל') {
+    if (rec.by !== user.name) return { error: 'רק מי שפתח את הפרויקט, או מנהל, יכול למחוק אותו' };
+    if (rec.status === 'הושלם') return { error: 'פרויקט שהושלם נמחק רק על ידי מנהל' };
+  }
+
+  // השלבים – מלמטה למעלה, כדי שמספרי השורות לא יזוזו
+  const st = projectStagesSheet_(ss);
+  const sLast = st.getLastRow();
+  let stages = 0;
+  if (sLast >= 2) {
+    const keys = st.getRange(2, 1, sLast - 1, 1).getValues();
+    for (let i = keys.length - 1; i >= 0; i--) {
+      if (String(keys[i][0]) === pid) { st.deleteRow(i + 2); stages++; }
+    }
+  }
+  sh.deleteRow(rowNum);
+
+  let mikveh = null;
+  if (d.restore && rec.status !== 'הושלם' && typeof mikvehRow_ === 'function') {
+    const r = mikvehRow_(ss, rec.mikveh);
+    if (r && apiClean_(r.sh.getRange(r.rowNum, MIKVEH_EDITABLE.activity + 1).getValue()) === 'בשיפוץ') {
+      mikveh = projectSetActivity_(ss, rec.mikveh, 'פעיל');
+    }
+  }
+  return { ok: true, id: pid, stages: stages, mikveh: mikveh };
+}
+
+/**
  * אישור סיום הפרויקט — הרגע שבו המקווה נכנס לשירות.
  * data: {id, force}
  *
