@@ -329,5 +329,49 @@ run(box, 'addWorkItems_', box.__ss, { items: [{ mikveh: MIKVAOT[0], type: 'cert'
 run(box, 'updateWorkItem_', box.__ss, { id: workRow(box, MIKVAOT[0])[0], status: 'done' }, USER);
 check('קבוצה לא מחוברת – אין הכרזה', groupMsgs().length === 0);
 
+console.log('\n— סוף שבוע: סקר "מה בוצע" —');
+box = setup();
+box.__ss.getSheetByName('משתמשים').appendRow(['u2', 'מנדל ראנד', 'm@r.c', '0502222222', 'מפקח', 'כן', '', '', '', '']);
+const MENDEL = { id: 'u2', name: 'מנדל ראנד', phone: '0502222222', role: 'מפקח' };
+run(box, 'addWorkItems_', box.__ss, { items: MIKVAOT.slice(0, 4).map((m) => ({ mikveh: m, type: 'fill' })) }, USER);
+const wId = (m) => workRow(box, m)[0];
+run(box, 'updateWorkItem_', box.__ss, { id: wId(MIKVAOT[0]), status: 'taken' }, USER);
+run(box, 'updateWorkItem_', box.__ss, { id: wId(MIKVAOT[1]), status: 'taken' }, MENDEL);
+run(box, 'updateWorkItem_', box.__ss, { id: wId(MIKVAOT[2]), status: 'taken' }, MENDEL);
+run(box, 'updateWorkItem_', box.__ss, { id: wId(MIKVAOT[2]), status: 'done' }, MENDEL); // כבר בוצע – לא בסקר
+// MIKVAOT[3] לא נלקח – לא בסקר
+box.sent.length = 0;
+box.weeklyDonePoll();
+const dpoll = box.sent.filter((s) => s.poll)[0];
+check('נשלח סקר "מה בוצע"', !!dpoll && /^סוף שבוע — מה בוצע/.test(dpoll.body.message), dpoll && dpoll.body.message);
+const dopts = dpoll ? dpoll.body.options.map((o) => o.optionName) : [];
+check('רק מה שנלקח ולא בוצע, עם שם הלוקח', JSON.stringify(dopts) === JSON.stringify([MIKVAOT[1] + ' — מנדל ראנד', MIKVAOT[0] + ' — שמואל גולדמן', 'עוד לא סיימתי']), dopts);
+const DPID = rows(box, 'סקרי עבודה').filter((r) => r[2] === 'done')[0][0];
+box.sent.length = 0;
+box.weeklyDonePoll();
+check('לא נשלח פעמיים באותו יום', box.sent.filter((s) => s.poll).length === 0);
+
+box.sent.length = 0;
+vote(box, 'incomingMessageReceived', '972502222222@c.us', 'מנדל', DPID, [MIKVAOT[1] + ' — מנדל ראנד']);
+check('מי שלקח סימן – בוצע', workRow(box, MIKVAOT[1])[4] === 'done', workRow(box, MIKVAOT[1])[4]);
+check('הוכרז בקבוצה', box.sent.some((s) => /✅ מנדל ראנד סיים\/ה: כפר סבא/.test(s.body.message || '')));
+box.sent.length = 0;
+vote(box, 'incomingMessageReceived', '972502222222@c.us', 'מנדל', DPID, [MIKVAOT[1] + ' — מנדל ראנד', MIKVAOT[0] + ' — שמואל גולדמן']);
+check('סימון של מי שלא לקח – לא נרשם', workRow(box, MIKVAOT[0])[4] === 'taken', workRow(box, MIKVAOT[0])[4]);
+check('ונשלחה הודעה', box.sent.some((s) => /הסימון שלך לא נרשם/.test(s.body.message || '')));
+vote(box, 'incomingMessageReceived', '972502222222@c.us', 'מנדל', DPID, [MIKVAOT[0] + ' — שמואל גולדמן']);
+check('ביטול סימון – חוזר ל"נלקח"', workRow(box, MIKVAOT[1])[4] === 'taken' && workRow(box, MIKVAOT[1])[5] === 'מנדל ראנד', workRow(box, MIKVAOT[1]).slice(4, 6));
+vote(box, 'incomingMessageReceived', '972501111111@c.us', 'שמוליק', DPID, ['עוד לא סיימתי']);
+check('"עוד לא סיימתי" – לא משנה כלום', workRow(box, MIKVAOT[0])[4] === 'taken');
+rows(box, 'סקרי עבודה').forEach((r, i) => { if (i) r[7] = new Date(Date.now() - 10 * 60000); });
+box.sent.length = 0;
+box.workPollSummary();
+check('הסיכום התקופתי לא נוגע בסקר "מה בוצע"', !box.sent.some((s) => /סוף שבוע/.test(s.body.message || '')), box.sent.map((s) => s.body.message));
+
+box = setup();
+box.sent.length = 0;
+box.weeklyDonePoll();
+check('אין משימות שנלקחו – לא נשלח כלום', box.sent.length === 0);
+
 console.log('\n' + (fail ? '❌ ' + fail + ' נכשלו, ' : '✅ ') + pass + ' עברו');
 process.exit(fail ? 1 : 0);
