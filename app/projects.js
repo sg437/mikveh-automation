@@ -165,6 +165,15 @@
             bySel.value = val;
           }
           el.disabled = false;
+          // הפס בכותרת ופאנל אישור הסיום תלויים בכמה שלבים אושרו – מציירים אותם מחדש
+          const cardEl = el.closest('[data-project]');
+          const p = all().find((x) => x.id === pid);
+          if (p && cardEl) {
+            const prog = cardEl.querySelector('.pprog');
+            if (prog) prog.innerHTML = bar(p);
+            const done = cardEl.querySelector('.pdone');
+            if (done) { done.outerHTML = completePanel(p); bindComplete(cardEl); }
+          }
           K.toast('השלב עודכן');
           refreshNav();
         }).catch((err) => { el.disabled = false; K.toast('לא נשמר: ' + err.message); });
