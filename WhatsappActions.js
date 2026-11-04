@@ -193,6 +193,63 @@ function waReportBlocked_(waiting) {
     '']);
 }
 
+// ==================== בדיקה: לאילו לשוניות המערכת לא יכולה לכתוב ====================
+
+/** הלשוניות שהמערכת כותבת אליהן (מהוואטסאפ, מהאפליקציה ומהטריגרים) */
+function systemWriteSheets_() {
+  const names = [
+    API.SHEETS.master, API.SHEETS.actions, API.SHEETS.inspections, API.SHEETS.tasks, API.SHEETS.plugs,
+    WRITE.RAW_INSPECTION_SHEET, WRITE.MESSAGES_SHEET, WRITE.GROUPS_SHEET, WRITE.CONTRACTORS_SHEET,
+    WRITE.CONTRACTOR_MSGS_SHEET, WRITE.REACTIONS_SHEET, WRITE.WORK_SHEET,
+    AUTH.USERS_SHEET, AUTH.SESSIONS_SHEET, AUTH.PERMS_SHEET, MEDIA.SHEET, PROJECTS.SHEET, PROJECTS.STAGES_SHEET,
+    ASK.SHEET, ASK.ANSWERS_SHEET, ACCESS.SHEET, WORK_POLL.SHEET, WORK_POLL.LOG_SHEET,
+    CONFIG.QUEUE_SHEET, CONFIG.ERROR_SHEET, CONFIG.REPORT_SHEET, CONFIG.LIST_SHEET, WA_ACTIONS.PENDING_SHEET,
+  ];
+  const out = {};
+  names.forEach(function (n) { if (n) out[n] = true; });
+  return out;
+}
+
+/** מחזיר את ההגנות שהחשבון הנוכחי לא רשאי לערוך: [{file, sheet, range, used}] */
+function blockedProtections_(ss, fileLabel, used) {
+  const out = [];
+  ss.getSheets().forEach(function (sh) {
+    const name = sh.getName();
+    const list = sh.getProtections(SpreadsheetApp.ProtectionType.SHEET)
+      .concat(sh.getProtections(SpreadsheetApp.ProtectionType.RANGE));
+    list.forEach(function (p) {
+      if (p.isWarningOnly() || p.canEdit()) return;
+      const range = p.getProtectionType() === SpreadsheetApp.ProtectionType.SHEET ? 'כל הלשונית' : p.getRange().getA1Notation();
+      out.push({ file: fileLabel, sheet: name, range: range, used: !!used[name] });
+    });
+  });
+  return out;
+}
+
+/**
+ * ★ מריצים מעורך הסקריפט (רק קורא, לא משנה כלום) ★
+ * עובר על כל ההגנות בגיליון המקוואות ובגיליון הסקריפט, ומדפיס ביומן הביצוע
+ * לאילו לשוניות החשבון שמריץ את הסקריפט אינו רשאי לכתוב — קודם אלה שהמערכת
+ * באמת כותבת אליהן. אותו חשבון מריץ את הטריגרים ואת האפליקציה (USER_DEPLOYING).
+ */
+function checkProtectedTabs() {
+  const used = systemWriteSheets_();
+  let who = '';
+  try { who = Session.getEffectiveUser().getEmail(); } catch (ignore) {}
+  let blocked = blockedProtections_(SpreadsheetApp.getActiveSpreadsheet(), 'גיליון הסקריפט', used);
+  const sheetId = getProp_(API.SHEET_ID_PROP);
+  if (sheetId) blocked = blocked.concat(blockedProtections_(SpreadsheetApp.openById(sheetId), 'גיליון המקוואות', used));
+  const bad = blocked.filter(function (b) { return b.used; });
+  const other = blocked.filter(function (b) { return !b.used; });
+  const line = function (b) { return '   • ' + b.file + ' ← "' + b.sheet + '" (' + b.range + ')'; };
+  const lines = ['בדיקה עבור החשבון: ' + (who || '(לא ידוע)')];
+  if (!bad.length) lines.push('✅ אין חסימה באף לשונית שהמערכת כותבת אליה.');
+  else lines.push('❌ ' + bad.length + ' חסימות בלשוניות שהמערכת כותבת אליהן — צריך להוסיף את החשבון בהגנה:', bad.map(line).join('\n'));
+  if (other.length) lines.push('ℹ️ ' + other.length + ' הגנות נוספות חוסמות את החשבון, בלשוניות שהמערכת לא כותבת אליהן (לא דחוף):', other.map(line).join('\n'));
+  Logger.log(lines.join('\n'));
+  return { bad: bad, other: other };
+}
+
 // ==================== שחזור: דיווחים שנכשלו לפני התיקון ====================
 
 /**
