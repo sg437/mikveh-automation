@@ -67,5 +67,28 @@ actions.appendRow = () => { throw new Error('Service unavailable'); };
 const n5 = report('אלון שבות');
 check('נרשמה כשגיאה', /שגיאה ברישום/.test(n5) && errorsCount() === 2, n5);
 
+console.log('— שחזור דיווחים שנכשלו לפני התיקון —');
+actions.appendRow = realAppend;
+const queue = ss.getSheetByName('תור נכנס') || ss._add('תור נכנס', [new Array(14).fill('כותרת')]);
+const qrow = (text, note) => { const r = new Array(14).fill(''); r[0] = '2026-11-02 10:00:00'; r[2] = text; r[3] = 'שולח'; r[4] = '0502222222'; r[5] = 'טקסט'; r[9] = 'טופל'; r[10] = note; queue.appendRow(r); };
+const blocked = 'זוהה: אלעד | שגיאה ברישום הפעולה בתיק: Exception: ניסית לערוך אובייקט או תא מוגן.';
+qrow('ביקרתי היום באלעד', blocked);
+qrow('סתם שיחה', blocked.replace('אלעד', 'אריאל'));
+qrow('דיווח רגיל', 'זוהה: אלקנה | נרשם בתיק: ביקור כשרות');
+const seenRefs = [];
+box.analyzeWithGemini_ = (text, blob, ref) => {
+  seenRefs.push(ref);
+  return text === 'סתם שיחה' ? { is_report: false } : { is_report: true, mikveh_name: 'אלעד', action_type: 'ביקור', summary: text };
+};
+const before = actions.getLastRow();
+box.recoverBlockedWhatsappActions();
+check('רק הדיווח החסום עם פעולה נרשם', actions.getLastRow() === before + 1, actions.getLastRow() - before);
+check('התאריך היחסי לפי זמן קבלת ההודעה', seenRefs.length === 2 && seenRefs[0] && new Date(seenRefs[0]).getDate() === 2, seenRefs);
+check('ההערה עודכנה לשחזור', /נרשם בתיק.*\(שחזור\)/.test(queue._rows[1][10]), queue._rows[1][10]);
+check('שיחה בלי פעולה מסומנת', /שחזור: לא זוהתה/.test(queue._rows[2][10]), queue._rows[2][10]);
+check('שורה תקינה לא נגעו בה', queue._rows[3][10] === 'זוהה: אלקנה | נרשם בתיק: ביקור כשרות');
+box.recoverBlockedWhatsappActions();
+check('הרצה חוזרת לא רושמת פעמיים', actions.getLastRow() === before + 1 && seenRefs.length === 2);
+
 console.log('\n' + pass + ' עברו, ' + fail + ' נכשלו');
 process.exit(fail ? 1 : 0);

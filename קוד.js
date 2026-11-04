@@ -629,7 +629,8 @@ function stage3Ready_() {
  * שולח את הדיווח (ועם אודיו — גם את הקובץ לתמלול) לג'מיני,
  * ומקבל JSON מובנה לפי סכמה קשיחה. כולל 3 ניסיונות (בלון 67 הישן).
  */
-function analyzeWithGemini_(text, blob) {
+/** refDate – לפיו מחושב "אתמול" וכד' (ברירת מחדל: עכשיו; בשחזור – זמן קבלת ההודעה) */
+function analyzeWithGemini_(text, blob, refDate) {
   const key = getProp_('GEMINI_API_KEY');
   const model = getProp_('GEMINI_MODEL') || 'gemini-2.5-flash';
   const names = getMikvehList_();
@@ -643,7 +644,7 @@ function analyzeWithGemini_(text, blob) {
       },
     });
   }
-  parts.push({ text: buildPrompt_(text, names, !!blob) });
+  parts.push({ text: buildPrompt_(text, names, !!blob, refDate) });
 
   const body = {
     contents: [{ parts: parts }],
@@ -741,7 +742,7 @@ function normalizeGeminiResult_(parsed, list) {
   return parsed;
 }
 
-function buildPrompt_(text, names, hasBlob) {
+function buildPrompt_(text, names, hasBlob, refDate) {
   const listLines = names.map(function (m) {
     return m.city ? m.name + ' | עיר: ' + m.city : m.name;
   });
@@ -769,7 +770,7 @@ function buildPrompt_(text, names, hasBlob) {
     '- transcript: תמלול מלא, רק אם צורף אודיו.',
     '- action_type: הפעולה שהדיווח אומר שבוצעה בפועל, אחת מאלה בלבד: ריקון מאגר / החלפת אוצר / מילוי אוצר / חידוש תעודה / תיקון / ביקור / אחר. אם זה רק תכנון, בקשה או שאלה — "אחר".',
     '- otzar: רק אם action_type הוא החלפת אוצר או מילוי אוצר: זריעה / השקה / חב"ד. אחרת ריק.',
-    '- done_date: תאריך הביצוע בפורמט YYYY-MM-DD רק אם צוין במפורש בדיווח (למשל "אתמול" ביחס להיום ' + Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'yyyy-MM-dd') + '). אחרת ריק.'
+    '- done_date: תאריך הביצוע בפורמט YYYY-MM-DD רק אם צוין במפורש בדיווח (למשל "אתמול" ביחס להיום ' + Utilities.formatDate(refDate || new Date(), CONFIG.TIMEZONE, 'yyyy-MM-dd') + '). אחרת ריק.'
   );
   return lines.join('\n');
 }
