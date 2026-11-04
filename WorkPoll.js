@@ -19,6 +19,12 @@
  *   2. GROUP_CHAT_ID, GREEN_ID_INSTANCE, GREEN_API_TOKEN (כמו שאר הגשר).
  *   3. להריץ פעם אחת installWorkPollTrigger — הסיכום נשלח מטריגר כל 5 דקות.
  *
+ * בדיקת סוף שבוע (weeklyDonePoll, טריגר ביום חמישי ב-18:00): סקר נוסף לקבוצה
+ * עם כל המשימות שנלקחו ועדיין לא בוצעו ("מקווה — שם"). מי שלקח משימה מסמן
+ * אותה, והיא נרשמת "בוצע" ומוכרזת בקבוצה. סימון של מי שלא לקח לא נרשם, ועל
+ * כך נשלחת הודעה. ביטול הסימון מחזיר את המשימה ל"נלקח". בגיליון הסקר נשמר
+ * עם הסוג "done" (DONE_TYPE). התקנה: להריץ פעם אחת installWeeklyDoneTrigger.
+ *
  * מגבלות וואטסאפ: עד 12 אפשרויות בסקר. יותר מזה — נשלחים כמה סקרים
  * ברצף (1/2, 2/2...). סקר עם אפשרות אחת אינו חוקי, ולכן מתווספת
  * האפשרות "לא לוקח".
@@ -41,6 +47,10 @@ const WORK_POLL = {
   LOG_SHEET: 'יומן סקרים',
   LOG_HEADERS: ['זמן', 'סוג ה-webhook', 'מי הצביע', 'מזהה הסקר', 'הסקר', 'מה נרשם', 'הערה'],
   LOG_MAX: 500,
+  DONE_TYPE: 'done', // עמודת "סוג" של סקר בדיקת סוף השבוע
+  DONE_TITLE: 'סוף שבוע — מה בוצע? ✅',
+  DONE_RULE: 'כל אחד מסמן רק את מה שהוא עצמו לקח וסיים. מה שלא מסומן נשאר על שמו לשבוע הבא.',
+  DONE_NONE: 'עוד לא סיימתי',
 };
 
 // ==================== עזרים ====================
@@ -327,6 +337,15 @@ function handlePollUpdate_(data) {
       if (after.length) byVoter[chatId] = after; else delete byVoter[chatId];
     });
 
+    if (String(row[2]) === WORK_POLL.DONE_TYPE) {
+      const r = workPollApplyDone_(ss, changes, map, items, names, String(row[0]));
+      sh.getRange(rowNum, 7, 1, 2).setValues([[JSON.stringify({ byVoter: byVoter, names: names }), new Date()]]);
+      if (r.applied) apiInvalidateData_();
+      workPollLog_(ss, data, pollId, String(row[3] || ''),
+        r.applied ? 'נרשמו ' + r.applied + ' שינויים' : 'אין שינוי', r.note);
+      return { status: 'poll', idMessage: data.idMessage || '', applied: r.applied, blocked: r.blocked, missing: r.missing };
+    }
+
     let applied = 0, blocked = 0, missing = 0;
     const tookNow = [], blockedNow = [];
     changes.forEach(function (ch) {
@@ -365,6 +384,109 @@ function handlePollUpdate_(data) {
     try { logError_('handlePollUpdate_', err, JSON.stringify(data || {}).slice(0, 500)); } catch (ignore) {}
     return { status: 'error', message: String(err) };
   }
+}
+
+/**
+ * סימונים בסקר "מה בוצע": סימון של מי שלקח את המשימה (או של מנהל) ⟵ "בוצע";
+ * ביטול הסימון ⟵ חזרה ל"נלקח". סימון של מישהו אחר לא נרשם, ונשלחת הודעה.
+ */
+function workPollApplyDone_(ss, changes, map, items, names, pollId) {
+  let applied = 0, blocked = 0, missing = 0;
+  const warn = [];
+  changes.forEach(function (ch) {
+    if (ch.option === WORK_POLL.DONE_NONE) return;
+    const rec = items[map[ch.option]];
+    if (!rec) { missing++; return; }
+    const who = workPollVoter_(ss, ch.chatId, names);
+    const mine = rec.takenBy === who.name || who.role === 'מנהל';
+    if (ch.take) {
+      if (rec.status === 'done') return; // כבר בוצע (למשל סומן באפליקציה)
+      if (!mine) {
+        blocked++;
+        warn.push('⚠️ ' + who.name + ', את "' + rec.mikveh + '" לקח/ה ' + (rec.takenBy || 'מישהו אחר') +
+          ' — רק הוא/היא מסמן/ת שבוצע. הסימון שלך לא נרשם.');
+        return;
+      }
+      // נרשם על שם מי שלקח את המשימה, גם כשמנהל מסמן בשבילו
+      const doer = rec.takenBy && rec.takenBy !== who.name ? { name: rec.takenBy, phone: rec.takenPhone || '', role: '' } : who;
+      updateWorkItem_(ss, { id: rec.id, status: 'done', via: 'מסקר סוף השבוע' }, doer);
+      rec.status = 'done';
+    } else {
+      if (rec.status !== 'done' || !mine) return;
+      updateWorkItem_(ss, { id: rec.id, status: 'taken', via: 'ביטול סימון בסקר סוף השבוע' },
+        rec.takenBy && rec.takenBy !== who.name ? { name: rec.takenBy, phone: rec.takenPhone || '', role: '' } : who);
+      rec.status = 'taken';
+    }
+    applied++;
+  });
+  if (warn.length) workPollSay_(warn.join('\n'), pollId);
+  const note = [];
+  if (blocked) note.push(blocked + ' סימונים של מי שלא לקח את המשימה');
+  if (missing) note.push(missing + ' סימונים על משימות שנמחקו');
+  return { applied: applied, blocked: blocked, missing: missing, note: note.join(' · ') };
+}
+
+// ==================== בדיקת סוף שבוע ====================
+
+/**
+ * טריגר שבועי (חמישי 18:00): סקר "מה בוצע" עם כל המשימות שנלקחו ועדיין לא
+ * בוצעו. אין כאלה — לא נשלח כלום. ⚠️ הטריגר מעביר אובייקט אירוע; מתעלמים ממנו.
+ */
+function weeklyDonePoll() {
+  if (!workPollEnabled_()) { Logger.log('weeklyDonePoll: הסקר כבוי (WA_WORK_POLL / GROUP_CHAT_ID / Green API)'); return; }
+  const sheetId = getProp_(API.SHEET_ID_PROP);
+  if (!sheetId) return;
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) return;
+  try {
+    // אותו יום לא נשלח פעמיים (טריגר כפול, או הרצה ידנית אחרי הטריגר)
+    const day = Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'yyyy-MM-dd');
+    const props = PropertiesService.getScriptProperties();
+    if (props.getProperty('WEEKLY_DONE_SENT') === day) { Logger.log('weeklyDonePoll: כבר נשלח היום'); return; }
+    const ss = SpreadsheetApp.openById(sheetId);
+    const open = apiWork_(ss).filter(function (w) { return w.status === 'taken' && w.takenBy; });
+    if (!open.length) { Logger.log('weeklyDonePoll: אין משימות שנלקחו וממתינות לביצוע'); return; }
+    open.sort(function (a, b) { return String(a.takenBy).localeCompare(String(b.takenBy)) || String(a.mikveh).localeCompare(String(b.mikveh)); });
+
+    const chatId = getProp_('GROUP_CHAT_ID');
+    const sh = workPollSheet_(ss);
+    const now = new Date();
+    const chunks = [];
+    for (let i = 0; i < open.length; i += WORK_POLL.MAX_OPTIONS) chunks.push(open.slice(i, i + WORK_POLL.MAX_OPTIONS));
+    let sent = 0;
+    chunks.forEach(function (chunk, idx) {
+      const title = WORK_POLL.DONE_TITLE + (chunks.length > 1 ? ' — ' + (idx + 1) + '/' + chunks.length : '');
+      const used = {}, map = {}, options = [];
+      chunk.forEach(function (w) {
+        const name = workPollOptionName_(w.mikveh + ' — ' + w.takenBy, used);
+        used[name] = true;
+        map[name] = w.id;
+        options.push({ optionName: name });
+      });
+      options.push({ optionName: WORK_POLL.DONE_NONE });
+      try {
+        const pollId = waSendPoll_(chatId, title + '\n' + WORK_POLL.DONE_RULE, options, true);
+        sh.appendRow([pollId, now, WORK_POLL.DONE_TYPE, title, chatId, JSON.stringify(map),
+          JSON.stringify({ byVoter: {}, names: {} }), now, '', WORK_POLL.OPEN]);
+        sent++;
+      } catch (err) {
+        logError_('weeklyDonePoll', err, title);
+      }
+    });
+    if (sent) props.setProperty('WEEKLY_DONE_SENT', day);
+    Logger.log('weeklyDonePoll: נשלחו ' + sent + ' סקרים (' + open.length + ' משימות)');
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/** ★ מריצים פעם אחת ★ מתקין את בדיקת סוף השבוע: כל יום חמישי ב-18:00. */
+function installWeeklyDoneTrigger() {
+  ScriptApp.getProjectTriggers().forEach(function (t) {
+    if (t.getHandlerFunction() === 'weeklyDonePoll') ScriptApp.deleteTrigger(t);
+  });
+  ScriptApp.newTrigger('weeklyDonePoll').timeBased().onWeekDay(ScriptApp.WeekDay.THURSDAY).atHour(18).create();
+  Logger.log('✅ בדיקת סוף השבוע הותקנה — כל יום חמישי ב-18:00.');
 }
 
 /** קריאה אחת של לשונית השיבוצים -> מפה של מזהה משימה לרשומה */
@@ -427,6 +549,7 @@ function workPollSummaryRun_(force, sheetId) {
   const now = new Date();
 
   values.forEach(function (row, i) {
+    if (String(row[2]) === WORK_POLL.DONE_TYPE) return; // לסקר "מה בוצע" אין סיכום – כל ביצוע מוכרז מיד
     // גם סקר שנסגר נבדק: אם מישהו שחרר משימה, הוא חוזר לחיים ונשלח סיכום מעודכן.
     const wasClosed = String(row[9] || WORK_POLL.OPEN) !== WORK_POLL.OPEN;
     const opened = parseStamp_(row[1]) || now;
