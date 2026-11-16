@@ -396,6 +396,22 @@ function processQueue() {
   }
 }
 
+const ARCHIVE_RETRY = { MAX_TRIES: 6 }; // processQueue רץ כל דקה – כ-5 דקות של ניסיונות
+
+/** כמה ניסיונות הורדה כבר נכשלו (נשמר בהערת העיבוד) */
+function downloadTries_(row) {
+  const m = String(row[COLS.NOTES - 1] || '').match(/^ניסיון הורדה (\d+)\//);
+  return m ? +m[1] : 0;
+}
+
+/** תקלה שכדאי לנסות שוב: שגיאת רשת (נזרקת), או קוד 429/5xx. 4xx = הקישור פג. */
+function isTransientDownloadError_(err) {
+  const m = String(err && err.message ? err.message : err).match(/הורדה נכשלה, קוד (\d+)/);
+  if (!m) return true;
+  const code = +m[1];
+  return code === 429 || code >= 500;
+}
+
 /** מוריד קובץ מ-Green API ומעלה לתיקיית החודש בארכיון הגולמי */
 function archiveRawFile_(row) {
   const resp = UrlFetchApp.fetch(row[COLS.DOWNLOAD_URL - 1], {
@@ -531,9 +547,24 @@ function processRow_(sheet, rowNum, row, notReady) {
   let archiveLink = String(row[COLS.ARCHIVE_LINK - 1] || '');
   const hasMedia = !!row[COLS.DOWNLOAD_URL - 1];
 
+  let mediaLost = '';
   if (hasMedia && !archiveLink) {
-    archiveLink = archiveRawFile_(row);
-    sheet.getRange(rowNum, COLS.ARCHIVE_LINK).setValue(archiveLink);
+    try {
+      archiveLink = archiveRawFile_(row);
+      sheet.getRange(rowNum, COLS.ARCHIVE_LINK).setValue(archiveLink);
+    } catch (err) {
+      // תקלת רשת רגעית ("Address unavailable", timeout, 5xx) – מנסים שוב בהרצות
+      // הבאות. רק אחרי כמה ניסיונות, או כשהקישור עצמו פג (4xx), מוותרים על המדיה
+      // וממשיכים לעבד את ההודעה בלעדיה – במקום לעצור את כל הדיווח.
+      const tries = downloadTries_(row) + 1;
+      if (isTransientDownloadError_(err) && tries < ARCHIVE_RETRY.MAX_TRIES) {
+        sheet.getRange(rowNum, COLS.NOTES).setValue('ניסיון הורדה ' + tries + '/' + ARCHIVE_RETRY.MAX_TRIES +
+          ' נכשל, ננסה שוב: ' + String(err.message || err).slice(0, 200));
+        return false;
+      }
+      mediaLost = 'המדיה לא ירדה (' + String(err.message || err).slice(0, 120) + ')';
+      logError_('processQueue שורה ' + rowNum + ' — ' + mediaLost + ', ההודעה עובדה בלעדיה', err, String(row[COLS.ID_MESSAGE - 1]));
+    }
   }
 
   // --- 2) שלב 3 עוד לא מוגדר? עוצרים כאן בעדינות ---
@@ -551,6 +582,11 @@ function processRow_(sheet, rowNum, row, notReady) {
   // --- 3) הודעה בלי שום תוכן לעיבוד (סטיקר, איש קשר וכו') ---
   if (!text && !isAudio && !hasMedia) {
     markDone_(sheet, rowNum, 'אין תוכן לעיבוד (סוג: ' + type + ')');
+    return true;
+  }
+  // המדיה לא ירדה ואין טקסט לעבד בלעדיה
+  if (mediaLost && !text) {
+    markDone_(sheet, rowNum, mediaLost + ' — אין טקסט לעיבוד');
     return true;
   }
 
@@ -571,7 +607,7 @@ function processRow_(sheet, rowNum, row, notReady) {
       appendMediaLink_(logRowNum, smartLink);
     }
 
-    markDone_(sheet, rowNum, buildDoneNote_(result) + (actionNote ? ' | ' + actionNote : ''));
+    markDone_(sheet, rowNum, buildDoneNote_(result) + (actionNote ? ' | ' + actionNote : '') + (mediaLost ? ' | ' + mediaLost : ''));
     return true;
   }
 
