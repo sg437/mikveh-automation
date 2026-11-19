@@ -160,7 +160,9 @@ function handleNotification_(data) {
   //    קולטים רק הודעות מהקבוצה הזו. אם לא הוגדר — קולטים הכל
   //    (שימושי בהרצה הראשונה כדי לגלות את ה-chatId של הקבוצה).
   const targetGroup = getProp_('GROUP_CHAT_ID');
-  if (targetGroup && sd.chatId !== targetGroup) {
+  // GroupBot.js במצב בדיקה: גם הצ'אט הפרטי של ALERT_CHAT_ID נקלט, כדי לנסות את הבוט בלי הקבוצה
+  const botTest = typeof botIsTestChatId_ === 'function' && botIsTestChatId_(sd.chatId);
+  if (targetGroup && sd.chatId !== targetGroup && !botTest) {
     return { status: 'ignored', reason: 'other chat: ' + sd.chatId };
   }
 
@@ -590,6 +592,15 @@ function processRow_(sheet, rowNum, row, notReady) {
     return true;
   }
 
+  // --- 3א) תשובה לשאלה של הבוט בקבוצה (GroupBot.js) — לא דיווח חדש ---
+  if (text && !hasMedia && typeof botTryAnswer_ === 'function') {
+    const answered = botTryAnswer_(row);
+    if (answered) {
+      markDone_(sheet, rowNum, answered);
+      return true;
+    }
+  }
+
   // --- 4) יש טקסט, או אודיו לתמלול → ניתוח מלא בג'מיני ---
   if (text || isAudio) {
     let blob = null;
@@ -600,14 +611,19 @@ function processRow_(sheet, rowNum, row, notReady) {
     const result = analyzeWithGemini_(text, blob);
     const logRowNum = appendToReportLog_(row, result, archiveLink);
     // רישום אוטומטי של הפעולה בתיק המקווה (פעיל רק כש-WA_AUTO_ACTIONS=1)
-    const actionNote = recordWhatsappAction_(row, result);
+    // (הודעה מצ'אט הבדיקה של הבוט אינה נרשמת בתיק — שבדיקה לא תיכנס לתיק אמיתי)
+    const isBotTest = typeof botIsTestChatId_ === 'function' && botIsTestChatId_(row[COLS.CHAT_ID - 1]);
+    const actionNote = isBotTest ? '' : recordWhatsappAction_(row, result);
 
     if (hasMedia && archiveLink) {
       const smartLink = fileToSmartArchive_(archiveLink, result.mikveh_name, result.settlement);
       appendMediaLink_(logRowNum, smartLink);
     }
 
-    markDone_(sheet, rowNum, buildDoneNote_(result) + (actionNote ? ' | ' + actionNote : '') + (mediaLost ? ' | ' + mediaLost : ''));
+    // מקווה לא זוהה — הבוט שואל בקבוצה (GroupBot.js, רק כש-WA_GROUP_BOT דלוק)
+    const botNote = typeof botAsk_ === 'function' ? botAsk_(row, logRowNum, result, hasMedia) : '';
+
+    markDone_(sheet, rowNum, buildDoneNote_(result) + (actionNote ? ' | ' + actionNote : '') + (botNote ? ' | ' + botNote : '') + (mediaLost ? ' | ' + mediaLost : ''));
     return true;
   }
 
@@ -642,7 +658,8 @@ function processRow_(sheet, rowNum, row, notReady) {
   const logRowNum = appendToReportLog_(row, orphan, archiveLink);
   const smartLink = fileToSmartArchive_(archiveLink, null, null);
   appendMediaLink_(logRowNum, smartLink);
-  markDone_(sheet, rowNum, 'מדיה ללא טקסט — תויקה במיקומים כלליים');
+  const botNote = typeof botAsk_ === 'function' ? botAsk_(row, logRowNum, orphan, true) : '';
+  markDone_(sheet, rowNum, 'מדיה ללא טקסט — תויקה במיקומים כלליים' + (botNote ? ' | ' + botNote : ''));
   return true;
 }
 
@@ -982,7 +999,12 @@ function findRecentReportBySender_(phone, receivedAt) {
 function fileToSmartArchive_(archiveLink, mikveh, settlement) {
   if (!archiveLink) return '';
   const file = DriveApp.getFileById(fileIdFromUrl_(archiveLink));
+  const copy = file.makeCopy(file.getName(), smartArchiveFolder_(mikveh, settlement));
+  return copy.getUrl();
+}
 
+/** תיקיית היעד של התיוק החכם (משמשת גם את GroupBot.js בהעברה למקווה שנקבע) */
+function smartArchiveFolder_(mikveh, settlement) {
   let target;
   if (mikveh) {
     const root = DriveApp.getFolderById(requireProp_('MIKVEH_ARCHIVE_FOLDER_ID'));
@@ -995,9 +1017,7 @@ function fileToSmartArchive_(archiveLink, mikveh, settlement) {
     const month = Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-yyyy');
     target = findOrCreateFolder_(root, label + ' - ' + month);
   }
-
-  const copy = file.makeCopy(file.getName(), target);
-  return copy.getUrl();
+  return target;
 }
 
 // -------------------- עזרים לשלב 3 --------------------
