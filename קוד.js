@@ -174,7 +174,7 @@ function handleNotification_(data) {
   // 4. נעילה — מונע התנגשות בין שני Webhooks שמגיעים באותה שנייה
   //    (ה-Race Condition המוכר מבאג מספר 1)
   const lock = LockService.getScriptLock();
-  lock.tryLock(15000);
+  const gotLock = lock.tryLock(15000);
 
   try {
     // 5. בדיקת כפילויות לפי idMessage — קודם במטמון מהיר, ואז בגיליון
@@ -213,10 +213,22 @@ function handleNotification_(data) {
       JSON.stringify(data).slice(0, 45000),
     ];
 
-    getSheet_(CONFIG.QUEUE_SHEET).appendRow(row);
+    const queue = getSheet_(CONFIG.QUEUE_SHEET);
+    queue.appendRow(row);
 
     // רושמים במטמון ל-6 שעות למניעת כפילות מהירה
     CacheService.getScriptCache().put('msg_' + idMessage, '1', 21600);
+
+    // תשובה בציטוט לשאלת הבוט (GroupBot.js) — מטופלת מיד, בלי לחכות לתור.
+    // רק כשהנעילה בידינו (שהמעבד לא יטפל באותה שורה במקביל), ורק מה שמזוהה
+    // בלי ג'מיני; כל השאר נשאר "ממתין" ומטופל בהרצה הבאה.
+    if (gotLock && text && !fileData.downloadUrl && typeof botTryAnswer_ === 'function') {
+      const fastNote = botTryAnswer_(row, true);
+      if (fastNote) {
+        markDone_(queue, queue.getLastRow(), fastNote + ' (מיידי)');
+        return { status: 'bot_answer', idMessage: idMessage };
+      }
+    }
 
     return { status: 'queued', idMessage: idMessage };
 

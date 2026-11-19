@@ -267,7 +267,9 @@ function botOpenQuestions_(sh) {
  * נקרא מ-processRow_ על הודעת טקסט בלי מדיה, לפני הניתוח הרגיל.
  * מחזיר הערת עיבוד אם ההודעה טופלה כתשובה, או '' אם זו הודעה רגילה.
  */
-function botTryAnswer_(queueRow) {
+/** fast=true: נקרא מה-Webhook עצמו — רק תשובה בציטוט שמזוהה בלי ג'מיני (מספר / שם מדויק).
+ *  כל השאר נשאר בתור ומטופל בהרצה הבאה (עד דקה). */
+function botTryAnswer_(queueRow, fast) {
   try {
     const chatId = String(queueRow[COLS.CHAT_ID - 1] || '');
     if (!botActiveFor_(chatId)) return '';
@@ -285,6 +287,7 @@ function botTryAnswer_(queueRow) {
 
     let q = quoted ? open.filter(function (x) { return x.id.toUpperCase() === quoted; })[0] : null;
     const isQuoted = !!q;
+    if (fast && !isQuoted) return '';
     if (!q && text.length <= BOT.UNQUOTED_MAX_CHARS) {
       q = open.filter(function (x) {
         return x.phone === phone && (new Date() - x.asked) / 60000 <= BOT.UNQUOTED_MIN;
@@ -294,7 +297,8 @@ function botTryAnswer_(queueRow) {
 
     const answerId = String(queueRow[COLS.ID_MESSAGE - 1] || '');
     const who = botDisplayName_(queueRow);
-    const r = botResolve_(text, q);
+    const r = botResolve_(text, q, fast);
+    if (fast && !r.mikveh) return ''; // צריך ג'מיני / בקשה חוזרת — בתור
 
     if (r.mikveh) {
       const note = botApply_(sh, q, r.mikveh, who, chatId, r.analysis);
@@ -334,7 +338,7 @@ function botTryAnswer_(queueRow) {
  * ואם לא — ג'מיני מול הרשימה הסגורה (כמו בדיווח רגיל).
  * מחזיר { mikveh } או { city, options } או {}.
  */
-function botResolve_(answer, q) {
+function botResolve_(answer, q, noGemini) {
   const t = String(answer || '').trim();
   const n = t.match(/^\D{0,6}(\d{1,2})\D{0,3}$/);
   if (n && q.options && q.options.length) {
@@ -354,6 +358,7 @@ function botResolve_(answer, q) {
     if (hits.length === 1) return { mikveh: hits[0] };
   }
 
+  if (noGemini) return {};
   const res = analyzeWithGemini_('שם המקווה: ' + t, null);
   // analysis: אם בתשובה עצמה נאמרה פעולה ("ריקון מאגר בתושיה") — לרישום בתיק
   if (res.mikveh_name) return { mikveh: res.mikveh_name, analysis: res };
