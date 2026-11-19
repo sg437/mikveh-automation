@@ -305,5 +305,40 @@ out = to(box, GROUP);
 check('תיוג נדחה ⟵ נשלח עם השם', out.length === 1 && /^📷 יוסי כהן, /.test(out[0].message) && !out[0].mentions, box.sent);
 check('והשאלה נרשמה', rows(box, 'שאלות הבוט').length === 2);
 
+// ===== תשובה מיידית =====
+console.log('\n— תשובה בציטוט: מיד, בלי לחכות לתור —');
+box = setup('1');
+const fimg = msg(box, YOSSI, 'יוסי', '', { image: true });
+run(box, 10);
+box.sent.length = 0;
+let fast = msg(box, DAVID, 'דוד', 'מקווה תושיה', { quoted: 'BOT1' });
+check('טופלה כבר ב-Webhook', fast.res.status === 'bot_answer', fast.res);
+check('שויך בלי הרצת התור', logRow(box, fimg.id)[4] === 'מקווה תושיה' && to(box, GROUP).length === 1, box.sent);
+check('השורה בתור סומנה כטופלה (מיידי)', /\(מיידי\)/.test(note(box, fast.id)), note(box, fast.id));
+
+box = setup('1');
+const r2 = msg(box, YOSSI, 'יוסי', 'רוקנתי מאגר באור עקיבא');
+run(box);
+box.sent.length = 0;
+fast = msg(box, YOSSI, 'יוסי', '1', { quoted: 'BOT1' });
+check('מספר מהרשימה — מיד', fast.res.status === 'bot_answer' && logRow(box, r2.id)[4] === 'מקווה אור עקיבא מרכז', fast.res);
+check('והפעולה נרשמה בתיק', (rows(box, 'אוצר זריעה')[1] || [])[5] === 'ריקון מאגר');
+
+box = setup('1');
+const fimg2 = msg(box, YOSSI, 'יוסי', '', { image: true });
+run(box, 10);
+box.sent.length = 0;
+fast = msg(box, YOSSI, 'יוסי', 'תושיא', { quoted: 'BOT1' });
+check('שגיאת כתיב — נשארת בתור (בלי ג\'מיני ב-Webhook)', fast.res.status === 'queued' && box.prompts.length === 0 && box.sent.length === 0, [fast.res, box.prompts]);
+run(box);
+check('ובהרצת התור — שויכה', logRow(box, fimg2.id)[4] === 'מקווה תושיה');
+
+box = setup('1');
+msg(box, YOSSI, 'יוסי', '', { image: true });
+run(box, 10);
+box.LockService = { getScriptLock: () => ({ waitLock: () => {}, tryLock: () => false, releaseLock: () => {} }) };
+fast = msg(box, YOSSI, 'יוסי', 'מקווה תושיה', { quoted: 'BOT1' });
+check('בלי נעילה — לא מטפלים במקביל לתור', fast.res.status === 'queued', fast.res);
+
 console.log('\n' + (fail ? '❌' : '✅') + ' ' + pass + ' עברו, ' + fail + ' נכשלו');
 process.exit(fail ? 1 : 0);
