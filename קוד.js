@@ -645,11 +645,24 @@ function processRow_(sheet, rowNum, row, notReady) {
   if (!receivedAt) receivedAt = new Date();
 
   const parent = findRecentReportBySender_(phone, receivedAt);
+  // ההודעה הקודמת בלי מקווה והבוט פעיל: ממתינים קודם כמו תמונה יתומה — אולי
+  // השם עוד בדרך, ואז התמונה תוצמד אליו והבוט לא יצטרך לשאול.
+  if (parent && !parent.mikveh && typeof botActiveFor_ === 'function' && botActiveFor_(row[COLS.CHAT_ID - 1]) &&
+      (new Date().getTime() - receivedAt.getTime()) / 60000 < STAGE3.ORPHAN_WAIT_MIN) {
+    if (!row[COLS.NOTES - 1]) sheet.getRange(rowNum, COLS.NOTES).setValue('ממתין לטקסט משלים...');
+    return false;
+  }
   if (parent) {
     const smartLink = fileToSmartArchive_(archiveLink, parent.mikveh, parent.settlement);
     appendMediaLink_(parent.rowNum, smartLink);
     appendLinkToCell_(parent.rowNum, RCOLS.RAW_LINK, archiveLink);
-    markDone_(sheet, rowNum, 'הוצמד לדיווח בשורה ' + parent.rowNum + ' ביומן');
+    // הוצמד להודעה בלי מקווה ("בוקר טוב", "תודה") — הבוט שואל על התמונה.
+    // אם כבר שאל על ההודעה הזו, botAsk_ מזהה שאלה פתוחה לאותו שולח ושותק.
+    let attachBotNote = '';
+    if (!parent.mikveh && typeof botAsk_ === 'function') {
+      attachBotNote = botAsk_(row, parent.rowNum, { is_report: true, mikveh_name: null, settlement: null }, true, parent.idMessage);
+    }
+    markDone_(sheet, rowNum, 'הוצמד לדיווח בשורה ' + parent.rowNum + ' ביומן' + (attachBotNote ? ' | ' + attachBotNote : ''));
     return true;
   }
 
@@ -980,7 +993,7 @@ function findRecentReportBySender_(phone, receivedAt) {
   if (last < 2) return null;
 
   const count = Math.min(50, last - 1);
-  const values = sheet.getRange(last - count + 1, 1, count, RCOLS.SETTLEMENT).getValues();
+  const values = sheet.getRange(last - count + 1, 1, count, RCOLS.ID_MESSAGE).getValues();
 
   for (let i = values.length - 1; i >= 0; i--) {
     const v = values[i];
@@ -995,6 +1008,7 @@ function findRecentReportBySender_(phone, receivedAt) {
         rowNum: last - count + 1 + i,
         mikveh: String(v[RCOLS.MIKVEH - 1] || '') || null,
         settlement: String(v[RCOLS.SETTLEMENT - 1] || '') || null,
+        idMessage: String(v[RCOLS.ID_MESSAGE - 1] || ''),
       };
     }
   }

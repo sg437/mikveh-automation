@@ -39,9 +39,9 @@ const BOT = {
   MENTION_PROP: 'WA_GROUP_BOT_MENTION',
   SHEET: 'שאלות הבוט',
   HEADERS: ['מזהה הודעת הבוט', 'נשאלה בשעה', 'סוג', 'שם השולח', 'טלפון השולח', 'idMessage מקורי',
-    'שורה ביומן', 'סטטוס', 'אפשרויות', 'ניתוח מקורי', 'ניסיונות', 'נסגרה בשעה', 'מקווה שנקבע', 'נקבע ע"י'],
+    'שורה ביומן', 'סטטוס', 'אפשרויות', 'ניתוח מקורי', 'ניסיונות', 'נסגרה בשעה', 'מקווה שנקבע', 'נקבע ע"י', 'idMessage ביומן'],
   C: { ID: 0, ASKED: 1, KIND: 2, NAME: 3, PHONE: 4, ORIG: 5, LOGROW: 6, STATUS: 7, OPTIONS: 8,
-    ANALYSIS: 9, TRIES: 10, CLOSED: 11, MIKVEH: 12, BY: 13 },
+    ANALYSIS: 9, TRIES: 10, CLOSED: 11, MIKVEH: 12, BY: 13, LOGID: 14 },
   OPEN: 'פתוחה',
   DONE: 'שויך',
   MANUAL: 'לבירור ידני',
@@ -147,7 +147,9 @@ function botDisplayName_(queueRow) {
  * נקרא מ-processRow_ אחרי שהדיווח נרשם ביומן. אם המקווה לא זוהה — שואל
  * בקבוצה ומחזיר הערה קצרה להערות העיבוד. לעולם לא זורק שגיאה.
  */
-function botAsk_(queueRow, logRowNum, result, hasMedia) {
+/** logId: idMessage של שורת היומן, כשהיא שונה מההודעה שעליה שואלים
+ *  (תמונה שהוצמדה להודעה קודמת של אותו שולח). */
+function botAsk_(queueRow, logRowNum, result, hasMedia, logId) {
   try {
     const chatId = String(queueRow[COLS.CHAT_ID - 1] || '');
     if (!botActiveFor_(chatId)) return '';
@@ -199,7 +201,7 @@ function botAsk_(queueRow, logRowNum, result, hasMedia) {
       summary: result.summary || '', defect_type: result.defect_type || '',
     };
     sh.appendRow([botId, new Date(), kind, realName, phone, origId, logRowNum, BOT.OPEN,
-      options.length ? JSON.stringify(options) : '', JSON.stringify(analysis), 0, '', '', '']);
+      options.length ? JSON.stringify(options) : '', JSON.stringify(analysis), 0, '', '', '', logId || origId]);
     return 'הבוט שאל בקבוצה לאיזה מקווה';
   } catch (err) {
     try { logError_('botAsk_', err, String(queueRow && queueRow[COLS.ID_MESSAGE - 1])); } catch (ignore) {}
@@ -256,7 +258,8 @@ function botOpenQuestions_(sh) {
     try { analysis = v[C.ANALYSIS] ? JSON.parse(v[C.ANALYSIS]) : {}; } catch (ignore) {}
     out.push({ rowNum: i + 2, id: String(v[C.ID]), asked: asked, kind: String(v[C.KIND] || ''),
       name: String(v[C.NAME] || ''), phone: String(v[C.PHONE] || ''), origId: String(v[C.ORIG] || ''),
-      logRow: +v[C.LOGROW] || 0, options: options, analysis: analysis, tries: +v[C.TRIES] || 0 });
+      logRow: +v[C.LOGROW] || 0, logId: String(v[C.LOGID] || v[C.ORIG] || ''),
+      options: options, analysis: analysis, tries: +v[C.TRIES] || 0 });
   });
   return out.sort(function (a, b) { return b.asked - a.asked; });
 }
@@ -416,13 +419,14 @@ function botApply_(sh, q, mikveh, who, chatId, answerAnalysis) {
 
 /** שורת היומן של הדיווח: לפי המספר שנשמר, ובדיקה לפי idMessage (ואם זז — חיפוש) */
 function botFindLogRow_(log, q) {
+  const want = q.logId || q.origId;
   if (q.logRow && q.logRow <= log.getLastRow()) {
     const id = String(log.getRange(q.logRow, RCOLS.ID_MESSAGE).getValue() || '');
-    if (!q.origId || id === q.origId) return q.logRow;
+    if (!want || id === want) return q.logRow;
   }
-  if (!q.origId || log.getLastRow() < 2) return 0;
+  if (!want || log.getLastRow() < 2) return 0;
   const hit = log.getRange(2, RCOLS.ID_MESSAGE, log.getLastRow() - 1, 1)
-    .createTextFinder(q.origId).matchEntireCell(true).findNext();
+    .createTextFinder(want).matchEntireCell(true).findNext();
   return hit ? hit.getRow() : 0;
 }
 
