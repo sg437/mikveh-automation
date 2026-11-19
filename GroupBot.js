@@ -26,11 +26,17 @@
  *   1      פעיל בקבוצה (GROUP_CHAT_ID).
  * נדרשים גם GREEN_ID_INSTANCE + GREEN_API_TOKEN (כבר מוגדרים).
  *
+ * תיוג אמיתי (@) של מי שנשאל — Script Property בשם WA_GROUP_BOT_MENTION עם 1.
+ * במקום השם נכתב @מספר, ונשלח לצידו mentions כדי שוואטסאפ יציג אותו כתיוג
+ * עם התראה. אם השליחה עם תיוג נכשלת — נשלחת אותה הודעה עם השם, בלי תיוג.
+ * בלי המאפיין: השם כטקסט רגיל (בלי התראה מיוחדת).
+ *
  * השאלות נשמרות בלשונית "שאלות הבוט" בגיליון של הסקריפט.
  ************************************************************************/
 
 const BOT = {
   PROP: 'WA_GROUP_BOT',
+  MENTION_PROP: 'WA_GROUP_BOT_MENTION',
   SHEET: 'שאלות הבוט',
   HEADERS: ['מזהה הודעת הבוט', 'נשאלה בשעה', 'סוג', 'שם השולח', 'טלפון השולח', 'idMessage מקורי',
     'שורה ביומן', 'סטטוס', 'אפשרויות', 'ניתוח מקורי', 'ניסיונות', 'נסגרה בשעה', 'מקווה שנקבע', 'נקבע ע"י'],
@@ -172,14 +178,19 @@ function botAsk_(queueRow, logRowNum, result, hasMedia) {
     })[0];
     if (recent) return 'הבוט לא שאל: יש כבר שאלה פתוחה לאותו שולח';
 
-    const name = botDisplayName_(queueRow);
+    // תיוג אמיתי: @מספר במקום השם (רק כש-WA_GROUP_BOT_MENTION=1)
+    const mention = botMentionFor_(queueRow);
+    const realName = botDisplayName_(queueRow);
+    const name = mention ? mention.tag : realName;
     let text;
     if (kind === 'ambiguous') text = BOT_TEXT.ambiguous(name, result.settlement, options);
     else if (kind === 'unknown') text = BOT_TEXT.unknown(name, result.settlement);
     else if (kind === 'media') text = BOT_TEXT.media(name, BOT_MEDIA_WHAT[String(queueRow[COLS.TYPE - 1] || '')] || 'התקבל קובץ');
     else text = BOT_TEXT.missing(name);
 
-    const botId = askSay_(chatId, text, origId);
+    let botId = mention ? botSayMention_(chatId, text, origId, mention.chatId) : askSay_(chatId, text, origId);
+    // התיוג נדחה — אותה הודעה עם השם
+    if (!botId && mention) botId = askSay_(chatId, text.split(mention.tag).join(realName), origId);
     if (!botId) return 'שאלת הבוט לא נשלחה (Green API)';
     if (origId) cache.put('bot_asked_' + origId, '1', 21600);
 
@@ -187,7 +198,7 @@ function botAsk_(queueRow, logRowNum, result, hasMedia) {
       action_type: result.action_type || '', otzar: result.otzar || '', done_date: result.done_date || '',
       summary: result.summary || '', defect_type: result.defect_type || '',
     };
-    sh.appendRow([botId, new Date(), kind, name, phone, origId, logRowNum, BOT.OPEN,
+    sh.appendRow([botId, new Date(), kind, realName, phone, origId, logRowNum, BOT.OPEN,
       options.length ? JSON.stringify(options) : '', JSON.stringify(analysis), 0, '', '', '']);
     return 'הבוט שאל בקבוצה לאיזה מקווה';
   } catch (err) {
@@ -198,6 +209,31 @@ function botAsk_(queueRow, logRowNum, result, hasMedia) {
 
 function botIsAction_(actionType) {
   return typeof WA_ACTIONS !== 'undefined' && !!WA_ACTIONS.MAP[actionType || ''];
+}
+
+/** { tag: '@972501234567', chatId: '972501234567@c.us' } למי ששלח, או null כשהתיוג כבוי */
+function botMentionFor_(queueRow) {
+  if (getProp_(BOT.MENTION_PROP) !== '1') return null;
+  const raw = String(queueRow[COLS.SENDER_PHONE - 1] || '').trim();
+  if (!raw) return null;
+  const chatId = raw.indexOf('@') >= 0 ? raw : raw.replace(/\D/g, '') + '@c.us';
+  const digits = chatId.replace(/@.*$/, '').replace(/\D/g, '');
+  return digits ? { tag: '@' + digits, chatId: chatId } : null;
+}
+
+/** הודעה עם תיוג. מחזיר idMessage או '' (ואז נשלחת הודעה רגילה). לא זורק. */
+function botSayMention_(chatId, text, quotedMessageId, mentionChatId) {
+  try {
+    const url = 'https://api.green-api.com/waInstance' + getProp_('GREEN_ID_INSTANCE') + '/sendMessage/' + getProp_('GREEN_API_TOKEN');
+    const payload = { chatId: chatId, message: text, mentions: [mentionChatId] };
+    if (quotedMessageId) payload.quotedMessageId = quotedMessageId;
+    const resp = UrlFetchApp.fetch(url, { method: 'post', contentType: 'application/json', muteHttpExceptions: true, payload: JSON.stringify(payload) });
+    if (resp.getResponseCode() !== 200) return '';
+    return String(JSON.parse(resp.getContentText() || '{}').idMessage || '');
+  } catch (err) {
+    Logger.log('botSayMention_ failed: ' + err);
+    return '';
+  }
 }
 
 function botCityOptions_(list, city) {
@@ -423,6 +459,7 @@ function testGroupBot() {
   Logger.log('GROUP_CHAT_ID: ' + (getProp_('GROUP_CHAT_ID') || '(חסר)'));
   Logger.log('ALERT_CHAT_ID: ' + (getProp_('ALERT_CHAT_ID') || '(חסר — נדרש למצב בדיקה ולהתראות)'));
   Logger.log('Green API: ' + (botGreenReady_() ? 'מוגדר' : '(חסר)'));
+  Logger.log('WA_GROUP_BOT_MENTION: ' + (getProp_(BOT.MENTION_PROP) === '1' ? 'תיוג אמיתי (@)' : 'שם בלבד'));
   Logger.log('WA_AUTO_ACTIONS: ' + (getProp_('WA_AUTO_ACTIONS') === '1' ? 'דלוק — פעולה תירשם בתיק אחרי שיוך' : 'כבוי'));
   const open = botOpenQuestions_(botSheet_());
   Logger.log('— שאלות פתוחות: ' + open.length + ' —');

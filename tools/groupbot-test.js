@@ -281,5 +281,29 @@ box = setup('');
 const ignored = msg(box, '972501111111@c.us', 'שמוליק', 'בדיקה', { chat: ALERT });
 check('כשהבוט כבוי — הצ\'אט הפרטי לא נקלט כלל', ignored.res.status === 'ignored', ignored.res);
 
+// ===== תיוג אמיתי =====
+console.log('\n— תיוג אמיתי (WA_GROUP_BOT_MENTION=1) —');
+box = setup('1');
+box.__props.WA_GROUP_BOT_MENTION = '1';
+msg(box, YOSSI, 'יוסי', '', { image: true });
+run(box, 10);
+out = to(box, GROUP);
+check('@מספר במקום השם, עם mentions', out.length === 1 && /^📷 @972509999999, /.test(out[0].message) &&
+  JSON.stringify(out[0].mentions) === JSON.stringify(['972509999999@c.us']), out);
+check('בשאלות הבוט נשמר השם', rows(box, 'שאלות הבוט')[1][3] === 'יוסי כהן');
+
+box = setup('1');
+box.__props.WA_GROUP_BOT_MENTION = '1';
+const realFetch = box.UrlFetchApp.fetch;
+box.UrlFetchApp = { fetch: (url, opt) => {
+  if (/sendMessage/.test(url) && JSON.parse(opt.payload).mentions) { box.sent.push({ rejected: true }); return { getResponseCode: () => 400, getContentText: () => '{}' }; }
+  return realFetch(url, opt);
+} };
+msg(box, YOSSI, 'יוסי', '', { image: true });
+run(box, 10);
+out = to(box, GROUP);
+check('תיוג נדחה ⟵ נשלח עם השם', out.length === 1 && /^📷 יוסי כהן, /.test(out[0].message) && !out[0].mentions, box.sent);
+check('והשאלה נרשמה', rows(box, 'שאלות הבוט').length === 2);
+
 console.log('\n' + (fail ? '❌' : '✅') + ' ' + pass + ' עברו, ' + fail + ' נכשלו');
 process.exit(fail ? 1 : 0);
