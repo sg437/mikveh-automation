@@ -340,5 +340,52 @@ box.LockService = { getScriptLock: () => ({ waitLock: () => {}, tryLock: () => f
 fast = msg(box, YOSSI, 'יוסי', 'מקווה תושיה', { quoted: 'BOT1' });
 check('בלי נעילה — לא מטפלים במקביל לתור', fast.res.status === 'queued', fast.res);
 
+// ===== תמונה שהוצמדה להודעה בלי מקווה =====
+console.log('\n— "בוקר טוב" ואז תמונה: הבוט שואל על התמונה —');
+box = setup('1');
+const hello = msg(box, YOSSI, 'יוסי', 'מישהו יודע מתי הכנס?');
+run(box);
+check('על ההודעה עצמה — שקט', box.sent.length === 0, box.sent);
+const pic = msg(box, YOSSI, 'יוסי', '', { image: true });
+msg(box, YOSSI, 'יוסי', '', { image: true });
+run(box, 1);
+check('קודם ממתינה 5 דקות (אולי השם בדרך)', box.sent.length === 0, box.sent);
+run(box, 5.5);
+out = to(box, GROUP);
+check('שאלה אחת על התמונות, בציטוט התמונה', out.length === 1 && out[0].quotedMessageId === pic.id && /בלי כיתוב/.test(out[0].message), out);
+box.sent.length = 0;
+msg(box, YOSSI, 'יוסי', 'מקווה כפר סבא', { quoted: 'BOT1' });
+check('התשובה משייכת את שורת היומן של ההודעה', logRow(box, hello.id)[4] === 'מקווה כפר סבא', logRow(box, hello.id));
+check('שתי התמונות הועברו לתיקיית המקווה', box.moves.length === 2 && box.moves.every((m) => /מקווה כפר סבא/.test(m.to)), box.moves);
+check('האישור בציטוט התמונה', (to(box, GROUP)[0] || {}).quotedMessageId === pic.id, box.sent);
+
+console.log('\n— "בוקר טוב", תמונה, ואחריה השם: שקט, הכל לשם —');
+box = setup('1');
+msg(box, YOSSI, 'יוסי', 'מישהו יודע מתי הכנס?');
+run(box);
+const pic2 = msg(box, YOSSI, 'יוסי', '', { image: true });
+run(box, 1);
+const named = msg(box, YOSSI, 'יוסי', 'בדיקה בתושיה');
+run(box);
+run(box, 5.5);
+check('לא נשאלה שאלה', box.sent.length === 0, box.sent);
+check('התמונה הוצמדה לדיווח עם השם', /שורה 3/.test(note(box, pic2.id)) && logRow(box, named.id)[4] === 'מקווה תושיה', note(box, pic2.id));
+
+console.log('\n— דיווח עם שם ואז תמונות: שקט —');
+box = setup('1');
+msg(box, YOSSI, 'יוסי', 'בדיקה בתושיה');
+run(box);
+msg(box, YOSSI, 'יוסי', '', { image: true });
+run(box, 3);
+check('לא נשאלה שאלה', box.sent.length === 0, box.sent);
+
+console.log('\n— דיווח לא מזוהה ואז תמונות: רק השאלה הראשונה —');
+box = setup('1');
+msg(box, YOSSI, 'יוסי', 'בדיקת גג בגבעת זאב');
+run(box);
+msg(box, YOSSI, 'יוסי', '', { image: true });
+run(box, 5.5);
+check('שאלה אחת בלבד', to(box, GROUP).length === 1, box.sent);
+
 console.log('\n' + (fail ? '❌' : '✅') + ' ' + pass + ' עברו, ' + fail + ' נכשלו');
 process.exit(fail ? 1 : 0);
