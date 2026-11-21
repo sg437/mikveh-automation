@@ -545,11 +545,12 @@ const REPORT_HEADERS = [
   'קישורי מדיה (תיוק חכם)', // J
   'קישור ארכיון גולמי',    // K
   'סטטוס זיהוי',           // L
+  'הצהרת מקווה',           // M — כן: ההודעה קובעת מקווה · לא: רק הזכירה (שאלה/שלילה). ריק: אין מקווה / שורה ישנה
 ];
 
 const RCOLS = {
   STAMP: 1, SENDER: 2, PHONE: 3, TEXT: 4, MIKVEH: 5, SETTLEMENT: 6,
-  DEFECT: 7, SUMMARY: 8, ID_MESSAGE: 9, MEDIA_LINKS: 10, RAW_LINK: 11, ID_STATUS: 12,
+  DEFECT: 7, SUMMARY: 8, ID_MESSAGE: 9, MEDIA_LINKS: 10, RAW_LINK: 11, ID_STATUS: 12, DECLARED: 13,
 };
 
 /**
@@ -613,6 +614,16 @@ function processRow_(sheet, rowNum, row, notReady) {
     }
   }
 
+  // --- 3ב) הקלטה בלי טקסט והבוט פעיל: ממתינים כמו לתמונה בלי כיתוב, כדי ששם
+  //     המקווה שנכתב מיד אחריה ("אשבול") ייקלט קודם, והבוט לא ישאל לשווא ---
+  if (isAudio && !text && typeof botActiveFor_ === 'function' && botActiveFor_(row[COLS.CHAT_ID - 1])) {
+    const heard = parseStamp_(row[COLS.RECEIVED - 1]) || new Date();
+    if ((new Date().getTime() - heard.getTime()) / 60000 < STAGE3.ORPHAN_WAIT_MIN) {
+      if (!row[COLS.NOTES - 1]) sheet.getRange(rowNum, COLS.NOTES).setValue('ממתין לטקסט משלים...');
+      return false;
+    }
+  }
+
   // --- 4) יש טקסט, או אודיו לתמלול → ניתוח מלא בג'מיני ---
   if (text || isAudio) {
     let blob = null;
@@ -620,7 +631,17 @@ function processRow_(sheet, rowNum, row, notReady) {
       blob = safeBlobForGemini_(archiveLink);
     }
 
-    const result = analyzeWithGemini_(text, blob);
+    // שם מקווה מדויק שנכתב לבד ("אשבול", "מקווה אשבול") — מזוהה מקומית, בלי ג'מיני
+    // (לא זורק: תקלה ברשימה לא עוצרת את עיבוד ההודעה — ג'מיני ימשיך כרגיל)
+    let local = '';
+    if (!isAudio) { try { local = localMikvehMatch_(text, getMikvehList_()); } catch (ignore) {} }
+    const result = local ? {
+      is_report: false, mikveh_name: local, settlement: null, defect_type: '', summary: 'ציון שם מקווה: ' + local,
+      transcript: null, action_type: '', otzar: '', done_date: '', ambiguous_city: false,
+    } : analyzeWithGemini_(text, blob);
+    // האם ההודעה *קובעת* את המקווה (לשיוך הודעות סמוכות), או רק מזכירה אותו
+    result.declared = !!result.mikveh_name && !!(local ||
+      (result.is_report !== false && !mentionIsNotClaim_(text || result.transcript || '', result.mikveh_name)));
     const logRowNum = appendToReportLog_(row, result, archiveLink);
     // רישום אוטומטי של הפעולה בתיק המקווה (פעיל רק כש-WA_AUTO_ACTIONS=1)
     // (הודעה מצ'אט הבדיקה של הבוט אינה נרשמת בתיק — שבדיקה לא תיכנס לתיק אמיתי)
@@ -644,10 +665,14 @@ function processRow_(sheet, rowNum, row, notReady) {
   let receivedAt = parseStamp_(row[COLS.RECEIVED - 1]);
   if (!receivedAt) receivedAt = new Date();
 
-  const parent = findRecentReportBySender_(phone, receivedAt);
+  let parent = findRecentReportBySender_(phone, receivedAt);
+  const botOn = typeof botActiveFor_ === 'function' && botActiveFor_(row[COLS.CHAT_ID - 1]);
+  // אותו שולח ציין בחלון שני מקוואות שונים: לא מצרפים לאחד מהם בניחוש.
+  // התמונה ממתינה ואז נשאלת כיתומה (הבוט אינו משייך בשקט כשיש שני שמות).
+  if (parent && parent.conflict && botOn) parent = null;
   // ההודעה הקודמת בלי מקווה והבוט פעיל: ממתינים קודם כמו תמונה יתומה — אולי
   // השם עוד בדרך, ואז התמונה תוצמד אליו והבוט לא יצטרך לשאול.
-  if (parent && !parent.mikveh && typeof botActiveFor_ === 'function' && botActiveFor_(row[COLS.CHAT_ID - 1]) &&
+  if (parent && !parent.mikveh && botOn &&
       (new Date().getTime() - receivedAt.getTime()) / 60000 < STAGE3.ORPHAN_WAIT_MIN) {
     if (!row[COLS.NOTES - 1]) sheet.getRange(rowNum, COLS.NOTES).setValue('ממתין לטקסט משלים...');
     return false;
@@ -764,7 +789,9 @@ function analyzeWithGemini_(text, blob, refDate) {
       if (httpCode === 200) {
         const data = JSON.parse(resp.getContentText());
         const answer = data.candidates[0].content.parts[0].text;
-        return normalizeGeminiResult_(JSON.parse(answer), names);
+        const parsed = normalizeGeminiResult_(JSON.parse(answer), names);
+        if (!blob) parsed.transcript = null; // "תמלול" של הודעת טקסט הוא רק העתק שלה
+        return parsed;
       }
 
       // 429 / 5xx — שווה לנסות שוב; שגיאות אחרות — לעצור מיד
@@ -787,15 +814,20 @@ function analyzeWithGemini_(text, blob, refDate) {
  * בנוסף מסמן ערים מרובות מקוואות (ambiguous_city) לצורך סטטוס ביומן.
  */
 function normalizeGeminiResult_(parsed, list) {
-  parsed.mikveh_name = String(parsed.mikveh_name || '').trim() || null;
-  parsed.settlement = String(parsed.settlement || '').trim() || null;
-  parsed.defect_type = String(parsed.defect_type || '').trim();
-  parsed.summary = String(parsed.summary || '').trim();
-  parsed.transcript = String(parsed.transcript || '').trim() || null;
+  // ג'מיני מחזיר לפעמים את המילה "null" כטקסט — זה ריק, לא יישוב בשם null
+  const clean = function (v) {
+    const t = String(v === null || v === undefined ? '' : v).trim();
+    return /^(null|none|undefined|n\/a|-)$/i.test(t) ? '' : t;
+  };
+  parsed.mikveh_name = clean(parsed.mikveh_name) || null;
+  parsed.settlement = clean(parsed.settlement) || null;
+  parsed.defect_type = clean(parsed.defect_type);
+  parsed.summary = clean(parsed.summary);
+  parsed.transcript = clean(parsed.transcript) || null;
   parsed.ambiguous_city = false;
   // פעולה שבוצעה (לרישום אוטומטי בתיק המקווה – ראה WhatsappActions.js)
-  parsed.action_type = String(parsed.action_type || '').trim();
-  parsed.otzar = String(parsed.otzar || '').trim();
+  parsed.action_type = clean(parsed.action_type);
+  parsed.otzar = clean(parsed.otzar);
   parsed.done_date = /^\d{4}-\d{2}-\d{2}$/.test(String(parsed.done_date || '').trim()) ? String(parsed.done_date).trim() : '';
 
   if (parsed.mikveh_name) {
@@ -931,6 +963,7 @@ function appendToReportLog_(queueRow, result, archiveLink) {
     '',
     archiveLink || '',
     idStatus,
+    result.mikveh_name ? (result.declared ? 'כן' : 'לא') : '',
   ]);
   return sheet.getLastRow();
 }
@@ -987,32 +1020,149 @@ function appendLinkToCell_(rowNum, col, link) {
  * של אותו שולח בתוך חלון הזמן — כדי להצמיד אליו מדיה שהגיעה בנפרד.
  */
 function findRecentReportBySender_(phone, receivedAt) {
-  if (!phone) return null;
+  const c = senderMikvehClaims_(phone, receivedAt, 0);
+  if (c.best) {
+    c.best.conflict = c.conflict;
+    return c.best;
+  }
+  return c.fallback;
+}
+
+/**
+ * הודעות של אותו שולח בחלון ATTACH_WINDOW_MIN סביב receivedAt (מהחדשה לישנה):
+ *   best      — ההודעה האחרונה שקובעת מקווה (הצהרה)
+ *   fallback  — ההודעה האחרונה בלי שום מקווה ("בוקר טוב") — אליה מותר לצרף מדיה
+ *   declared  — שמות המקוואות שהוצהרו;  mentions — מקוואות שרק הוזכרו (שאלה / שלילה)
+ *   conflict  — יותר ממקווה מוצהר אחד, או אזכור של מקווה *אחר* — לא משייכים בניחוש
+ * הודעה שרק מזכירה מקווה אינה מקבלת מדיה (אחרת התמונה תופיע בכרטיס של המקווה שעליו שאלו).
+ */
+function senderMikvehClaims_(phone, receivedAt, excludeRow) {
+  const out = { best: null, fallback: null, declared: {}, mentions: {}, conflict: false };
+  if (!phone || !receivedAt) return out;
   const sheet = getSheet_(CONFIG.REPORT_SHEET);
   const last = sheet.getLastRow();
-  if (last < 2) return null;
+  if (last < 2) return out;
 
   const count = Math.min(50, last - 1);
-  const values = sheet.getRange(last - count + 1, 1, count, RCOLS.ID_MESSAGE).getValues();
+  const first = last - count + 1;
+  const values = sheet.getRange(first, 1, count, RCOLS.DECLARED).getValues();
 
   for (let i = values.length - 1; i >= 0; i--) {
     const v = values[i];
-    if (String(v[RCOLS.PHONE - 1]) !== phone) continue;
+    if (first + i === excludeRow) continue;
+    if (String(v[RCOLS.PHONE - 1]) !== String(phone)) continue;
 
     const stamp = parseStamp_(v[RCOLS.STAMP - 1]);
     if (!stamp) continue;
+    if (Math.abs(receivedAt.getTime() - stamp.getTime()) / 60000 > STAGE3.ATTACH_WINDOW_MIN) continue;
 
-    const diffMin = Math.abs(receivedAt.getTime() - stamp.getTime()) / 60000;
-    if (diffMin <= STAGE3.ATTACH_WINDOW_MIN) {
-      return {
-        rowNum: last - count + 1 + i,
-        mikveh: String(v[RCOLS.MIKVEH - 1] || '') || null,
-        settlement: String(v[RCOLS.SETTLEMENT - 1] || '') || null,
-        idMessage: String(v[RCOLS.ID_MESSAGE - 1] || ''),
-      };
+    const mikveh = String(v[RCOLS.MIKVEH - 1] || '').trim();
+    const hit = {
+      rowNum: first + i,
+      mikveh: null,
+      settlement: String(v[RCOLS.SETTLEMENT - 1] || '') || null,
+      idMessage: String(v[RCOLS.ID_MESSAGE - 1] || ''),
+    };
+    if (mikveh && logRowDeclares_(v, mikveh)) {
+      out.declared[mikveh] = true;
+      hit.mikveh = mikveh;
+      if (!out.best) out.best = hit;
+    } else if (mikveh) {
+      out.mentions[mikveh] = true;
+    } else if (!out.fallback) {
+      out.fallback = hit;
     }
   }
-  return null;
+  const names = Object.keys(out.declared);
+  out.conflict = names.length > 1 ||
+    Object.keys(out.mentions).some(function (m) { return !out.declared[m]; });
+  return out;
+}
+
+/** האם שורת יומן *קובעת* את המקווה שלה (ולא רק מזכירה אותו) */
+function logRowDeclares_(v, mikveh) {
+  const status = String(v[RCOLS.ID_STATUS - 1] || '');
+  if (/^מזוהה \(/.test(status)) return true;          // אושר בקבוצה / לפי הודעה סמוכה
+  const flag = String(v[RCOLS.DECLARED - 1] || '').trim();
+  if (flag === 'כן') return true;
+  if (flag === 'לא') return false;
+  // שורה מלפני העמודה הזו: רק "מזוהה", ורק אם אינה שאלה / שלילה
+  return status === 'מזוהה' && !mentionIsNotClaim_(String(v[RCOLS.TEXT - 1] || ''), mikveh);
+}
+
+/**
+ * הודעה שמזכירה מקווה בלי לקבוע אותו: שאלה ("מתי בודקים באשבול?", "מישהו היה
+ * בתושיה") או שלילה ("זה לא אשבול", "לא בתושיה"). בספק — נחשב אזכור, כי עדיף
+ * שהבוט ישאל מאשר שישייך בטעות.
+ */
+function mentionIsNotClaim_(text, mikveh) {
+  const t = String(text || '').replace(/🎤 תמלול:/g, ' ').trim();
+  if (!t) return false;
+  if (/[?؟]/.test(t)) return true;
+  if (/^(מתי|מי|מה|למה|מדוע|האם|איפה|היכן|איך|כיצד|כמה|מישהו|יש למישהו|יודעים|יודע מישהו)(\s|$)/.test(t)) return true;
+  const tokens = mikvehTokens_(mikveh);
+  const norm = mikvehNorm_(t);
+  for (let i = 0; i < tokens.length; i++) {
+    const tok = tokens[i].replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const re = new RegExp('(^|\\s)(לא|ולא|אינו|אינה|אין|בלי)\\s+((זה|זהו|זאת|היה|הייתי)\\s+)?((של|ב|ל|מ|ה|ש)\\s?)?' + tok + '(\\s|$)');
+    if (re.test(norm)) return true;
+  }
+  return false;
+}
+
+/** ניקוי לצורך השוואת שמות: סימני פיסוק, גרשיים ומקפים ⟵ רווח */
+function mikvehNorm_(s) {
+  return String(s || '').replace(/["'״׳\-–—(),.!:;\/\\]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+/** הצורות שבהן נכתב שם המקווה: השם המלא, בלי "מקווה", וכל חלק בשם מורכב ("עפולה - כורש") */
+function mikvehTokens_(mikveh) {
+  const full = mikvehNorm_(mikveh);
+  const out = {};
+  if (full) out[full] = true;
+  const bare = full.replace(/^(מקווה|מקוה)\s+/, '');
+  if (bare.length >= 2) out[bare] = true;
+  String(mikveh || '').split(/\s[-–—]\s/).forEach(function (part) {
+    const p = mikvehNorm_(part).replace(/^(מקווה|מקוה)\s+/, '');
+    if (p.length >= 2) out[p] = true;
+  });
+  return Object.keys(out);
+}
+
+/**
+ * הודעה שהיא *רק* שם של מקווה ("אשבול", "מקווה אשבול", "באשבול", "תושיה" כשיש
+ * בה מקווה אחד) ⟵ השם המלא מהרשימה. אחרת ''. בלי ג'מיני.
+ * שני מקוואות שונים שמתאימים (שמות כפולים / עיר עם כמה מקוואות) ⟵ '' (לא מנחשים).
+ */
+function localMikvehMatch_(text, list) {
+  const raw = String(text || '').trim();
+  if (!raw || raw.length > 60 || /[?؟]/.test(raw)) return '';
+  const t = mikvehNorm_(raw);
+  if (!t) return '';
+  const cands = {};
+  cands[t] = true;
+  const noPrefix = t.replace(/^(במקווה|במקוה|מקווה|מקוה)\s+/, '');
+  cands[noPrefix] = true;
+  if (/^[בה]\S/.test(noPrefix)) cands[noPrefix.slice(1)] = true;   // "באשבול"
+
+  const hits = {};
+  const byCity = {};
+  (list || []).forEach(function (m) {
+    const name = mikvehNorm_(m.name);
+    const bare = name.replace(/^(מקווה|מקוה)\s+/, '');
+    if (cands[name] || cands[bare]) hits[m.name] = true;
+    const city = mikvehNorm_(m.city);
+    if (city) (byCity[city] = byCity[city] || {})[m.name] = true;
+  });
+  let names = Object.keys(hits);
+  if (!names.length) {
+    // שם יישוב שיש בו מקווה אחד בלבד
+    Object.keys(cands).forEach(function (c) {
+      if (byCity[c]) Object.keys(byCity[c]).forEach(function (n) { hits[n] = true; });
+    });
+    names = Object.keys(hits);
+  }
+  return names.length === 1 ? names[0] : '';
 }
 
 // -------------------- תיוק חכם בדרייב --------------------
