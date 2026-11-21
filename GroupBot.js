@@ -174,6 +174,16 @@ function botAsk_(queueRow, logRowNum, result, hasMedia, logId) {
     const cache = CacheService.getScriptCache();
     if (origId && cache.get('bot_asked_' + origId)) return '';
 
+    // לא צוין שום מקום, אבל אותו שולח כתב שם מקווה בהודעה סמוכה ("אשבול"
+    // אחרי ההקלטה, או מקווה שכבר שויך בתשובה לבוט) — משייכים בשקט, בלי לשאול.
+    if (kind === 'media' || kind === 'missing') {
+      const near = botNeighborMikveh_(phone, parseStamp_(queueRow[COLS.RECEIVED - 1]), logRowNum);
+      if (near) {
+        const done = botAssignLog_(getSheet_(CONFIG.REPORT_SHEET), logRowNum, near, 'מזוהה (לפי הודעה סמוכה)', result, chatId);
+        return 'שויך לפי הודעה סמוכה: ' + near + (done.notes.length ? ' | ' + done.notes.join(' | ') : '');
+      }
+    }
+
     const sh = botSheet_();
     const recent = botOpenQuestions_(sh).filter(function (q) {
       return q.phone === phone && (new Date() - q.asked) / 60000 <= BOT.SENDER_GAP_MIN;
@@ -350,11 +360,11 @@ function botResolve_(answer, q, noGemini) {
   }
 
   const list = getMikvehList_();
-  const norm = function (s) { return String(s || '').replace(/["'״׳\-–(),.]/g, ' ').replace(/\s+/g, ' ').trim(); };
+  const norm = mikvehNorm_;
   const nt = norm(t).replace(/^(מקווה|מקוה|במקווה|במקוה)\s+/, '');
-  for (let i = 0; i < list.length; i++) {
-    if (norm(list[i].name) === nt || norm(list[i].name) === norm(t)) return { mikveh: list[i].name };
-  }
+  // שם מדויק לבד (כולל יישוב עם מקווה אחד). שמות כפולים ⟵ לא מנחשים, ממשיכים הלאה.
+  const local = localMikvehMatch_(t, list);
+  if (local) return { mikveh: local };
   // בחירה מתוך הרשימה שהוצגה לפי חלק מהשם ("הספרדי")
   if (q.options && q.options.length && nt.length >= 2) {
     const hits = q.options.filter(function (o) { return norm(o).indexOf(nt) >= 0; });
@@ -374,35 +384,19 @@ function botResolve_(answer, q, noGemini) {
  * בתיק, אישור בקבוצה וסגירת השאלה. מחזיר הערה קצרה.
  */
 function botApply_(sh, q, mikveh, who, chatId, answerAnalysis) {
-  const notes = [];
+  let notes = [];
   const log = getSheet_(CONFIG.REPORT_SHEET);
   const rowNum = botFindLogRow_(log, q);
   let actionNote = '';
 
   if (rowNum) {
-    log.getRange(rowNum, RCOLS.MIKVEH).setValue(mikveh);
-    log.getRange(rowNum, RCOLS.ID_STATUS).setValue('מזוהה (אושר בקבוצה)');
-
-    const moved = botMoveMedia_(log, rowNum, mikveh);
-    if (moved) notes.push(moved + ' קבצים הועברו לתיקיית המקווה');
-
     // הפעולה שזוהתה בדיווח המקורי (ריקון, החלפת אוצר...) נרשמת עכשיו בתיק
     // ואם בדיווח המקורי לא הייתה פעולה אבל בתשובה כן — לוקחים את זו שבתשובה
     let a = q.analysis || {};
     if (!botIsAction_(a.action_type) && answerAnalysis && botIsAction_(answerAnalysis.action_type)) a = answerAnalysis;
-    if (a.action_type && !botIsTestChatId_(chatId) && typeof recordWhatsappAction_ === 'function') {
-      const v = log.getRange(rowNum, 1, 1, RCOLS.PHONE).getValues()[0];
-      const fake = [];
-      fake[COLS.RECEIVED - 1] = v[RCOLS.STAMP - 1];
-      fake[COLS.SENDER_NAME - 1] = v[RCOLS.SENDER - 1];
-      fake[COLS.SENDER_PHONE - 1] = String(v[RCOLS.PHONE - 1] || '');
-      actionNote = recordWhatsappAction_(fake, {
-        is_report: true, mikveh_name: mikveh, action_type: a.action_type, otzar: a.otzar,
-        done_date: a.done_date, summary: a.summary,
-      });
-      if (actionNote) notes.push(actionNote);
-    }
-    if (typeof apiInvalidateData_ === 'function') { try { apiInvalidateData_(); } catch (ignore) {} }
+    const done = botAssignLog_(log, rowNum, mikveh, 'מזוהה (אושר בקבוצה)', a, chatId);
+    notes = done.notes;
+    actionNote = done.actionNote;
   } else {
     notes.push('שורת היומן לא נמצאה');
   }
@@ -415,6 +409,47 @@ function botApply_(sh, q, mikveh, who, chatId, answerAnalysis) {
 
   askSay_(chatId, BOT_TEXT.done(mikveh, /^נרשם בתיק/.test(actionNote) ? actionNote : ''), q.origId || q.id);
   return notes.join(' | ');
+}
+
+/**
+ * משייך שורת יומן למקווה: עמודת המקווה והסטטוס, העברת המדיה לתיקיית המקווה,
+ * ורישום הפעולה בתיק (אם יש). משמש גם תשובה לבוט וגם שיוך שקט לפי הודעה סמוכה.
+ */
+function botAssignLog_(log, rowNum, mikveh, status, a, chatId) {
+  const notes = [];
+  let actionNote = '';
+  log.getRange(rowNum, RCOLS.MIKVEH).setValue(mikveh);
+  log.getRange(rowNum, RCOLS.ID_STATUS).setValue(status);
+
+  const moved = botMoveMedia_(log, rowNum, mikveh);
+  if (moved) notes.push(moved + ' קבצים הועברו לתיקיית המקווה');
+
+  a = a || {};
+  if (botIsAction_(a.action_type) && !botIsTestChatId_(chatId) && typeof recordWhatsappAction_ === 'function') {
+    const v = log.getRange(rowNum, 1, 1, RCOLS.PHONE).getValues()[0];
+    const fake = [];
+    fake[COLS.RECEIVED - 1] = v[RCOLS.STAMP - 1];
+    fake[COLS.SENDER_NAME - 1] = v[RCOLS.SENDER - 1];
+    fake[COLS.SENDER_PHONE - 1] = String(v[RCOLS.PHONE - 1] || '');
+    actionNote = recordWhatsappAction_(fake, {
+      is_report: true, mikveh_name: mikveh, action_type: a.action_type, otzar: a.otzar,
+      done_date: a.done_date, summary: a.summary,
+    });
+    if (actionNote) notes.push(actionNote);
+  }
+  if (typeof apiInvalidateData_ === 'function') { try { apiInvalidateData_(); } catch (ignore) {} }
+  return { notes: notes, actionNote: actionNote };
+}
+
+/**
+ * מקווה שאותו שולח כבר ציין בהודעה סמוכה (עד ATTACH_WINDOW_MIN לפני/אחרי),
+ * או שאליו שויכה הודעה סמוכה שלו (תשובה לבוט). '' אם אין, או אם יש שניים שונים.
+ */
+function botNeighborMikveh_(phone, receivedAt, excludeRow) {
+  // רק הצהרה על מקווה אחד, בלי אזכור של מקווה אחר — אחרת שואלים (ראה senderMikvehClaims_)
+  const c = senderMikvehClaims_(phone, receivedAt, excludeRow);
+  const names = Object.keys(c.declared);
+  return names.length === 1 && !c.conflict ? names[0] : '';
 }
 
 /** שורת היומן של הדיווח: לפי המספר שנשמר, ובדיקה לפי idMessage (ואם זז — חיפוש) */
