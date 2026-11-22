@@ -12,6 +12,13 @@ window.MIKVEH_CONFIG = {
   // מזהה OAuth Client (Web application) מ-Google Cloud Console – לכניסה עם Google.
   // אותו ערך צריך להיות גם ב-Script Property בשם GOOGLE_CLIENT_ID. ריק = מצב "מי אני" הישן.
   googleClientId: '',
+  // Firebase Analytics (מדידת שימוש). הערכים מ-Firebase Console ⇠ Project settings ⇠
+  // Your apps ⇠ Web app. ריק = המדידה כבויה ושום קוד של Firebase אינו נטען.
+  // אלה מזהים ציבוריים ולא סודות. בפרסום הם מוזרקים מה-Variables של הריפו.
+  firebaseApiKey: '',
+  firebaseProjectId: '',
+  firebaseAppId: '',
+  firebaseMeasurementId: '',
 };
 
 /**

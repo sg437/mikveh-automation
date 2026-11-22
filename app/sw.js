@@ -1,12 +1,12 @@
 /* Service worker: מטמון של קבצי האפליקציה לעבודה לא מקוונת. להעלות גרסה בכל שינוי.
    data.js (~3.6MB) אינו ברשימה בכוונה: הוא רק עותק גיבוי, והכללתו גרמה להורדה
    מחדש של 3.6MB בכל העלאת גרסה. הוא נכנס למטמון לבד אם וכאשר הוא נטען. */
-const CACHE = 'mikveh-app-v49';
+const CACHE = 'mikveh-app-v50';
 /* התשובה מהגיליון נשמרת במטמון נפרד, שאינו נמחק בהעלאת גרסה: האפליקציה
    מציגה אותו מיד בפתיחה, לפני שהרשת עונה, ולא היה טעם שהעלאת גרסה תחזיר
    כל אחד להמתנה מלאה בפתיחה שאחריה. */
 const DATA_CACHE = 'mikveh-data';
-const FILES = ['./', './index.html', './app.js', './forms.js', './talk.js', './work.js', './media.js', './edit.js', './gate.js', './setup.js', './ask.js', './joinform.js', './perms.js', './projects.js', './contractor.js', './auth.js', './config.js', './hebdate.js', './manifest.json',
+const FILES = ['./', './index.html', './analytics.js', './app.js', './forms.js', './talk.js', './work.js', './media.js', './edit.js', './gate.js', './setup.js', './ask.js', './joinform.js', './perms.js', './projects.js', './contractor.js', './auth.js', './config.js', './hebdate.js', './manifest.json',
   './privacy.html', './terms.html', './legal.css',
   './icon-192.png', './icon-512.png', './icon-maskable-512.png', './apple-touch-icon.png',
   './talk-icon-192.png', './talk-icon-512.png', './talk-icon-maskable-512.png'];
@@ -51,6 +51,9 @@ function fromCache(cached) {
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return;
   const url = new URL(e.request.url);
+  // מדידת השימוש (Firebase Analytics) עוברת ישר לרשת: אין מה לשמור ממנה,
+  // ותשובות אטומות (opaque) שלה היו תופסות מקום במטמון הנתונים לחינם.
+  if (/(^|\.)(google-analytics\.com|googletagmanager\.com|analytics\.google\.com|firebaseinstallations\.googleapis\.com|firebase\.googleapis\.com)$/.test(url.hostname)) return;
   // סיווג מפורש ולא לפי request.destination: ל-fetch() רגיל (וכך נטענים
   // הנתונים מהגיליון) ה-destination הוא מחרוזת ריקה, ולא 'empty' כפי שנראה
   // מהשם – וסיווג לפי זה שלח את הנתונים למסלול של קבצי האפליקציה.

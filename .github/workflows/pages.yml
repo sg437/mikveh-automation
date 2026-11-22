@@ -37,6 +37,11 @@ jobs:
           MIKVEH_API_URL: ${{ vars.MIKVEH_API_URL }}
           MIKVEH_API_TOKEN: ${{ vars.MIKVEH_API_TOKEN }}
           MIKVEH_GOOGLE_CLIENT_ID: ${{ vars.MIKVEH_GOOGLE_CLIENT_ID }}
+          # Firebase Analytics — לא חובה. בלי המשתנים האלה המדידה כבויה.
+          MIKVEH_FIREBASE_API_KEY: ${{ vars.MIKVEH_FIREBASE_API_KEY }}
+          MIKVEH_FIREBASE_PROJECT_ID: ${{ vars.MIKVEH_FIREBASE_PROJECT_ID }}
+          MIKVEH_FIREBASE_APP_ID: ${{ vars.MIKVEH_FIREBASE_APP_ID }}
+          MIKVEH_FIREBASE_MEASUREMENT_ID: ${{ vars.MIKVEH_FIREBASE_MEASUREMENT_ID }}
         run: python3 tools/build_config.py
       # אפליקציית הדיונים (app/talk/) נבנית מחדש מ-app/index.html בכל פרסום,
       # כדי שלא תישאר מאחור אחרי שינוי במסכים.
