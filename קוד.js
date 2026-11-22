@@ -614,9 +614,10 @@ function processRow_(sheet, rowNum, row, notReady) {
     }
   }
 
-  // --- 3ב) הקלטה בלי טקסט והבוט פעיל: ממתינים כמו לתמונה בלי כיתוב, כדי ששם
-  //     המקווה שנכתב מיד אחריה ("אשבול") ייקלט קודם, והבוט לא ישאל לשווא ---
-  if (isAudio && !text && typeof botActiveFor_ === 'function' && botActiveFor_(row[COLS.CHAT_ID - 1])) {
+  // --- 3ב) מדיה (הקלטה, או תמונה/סרטון/קובץ *עם* כיתוב) והבוט פעיל: ממתינים כמו
+  //     לתמונה בלי כיתוב, כדי ששם המקווה שנכתב מיד אחריה ("אשבול") ייקלט קודם,
+  //     והבוט לא ישאל לשווא. (תמונה בלי כיתוב ממתינה כבר בשלבים 5–6.) ---
+  if (hasMedia && (text || isAudio) && typeof botActiveFor_ === 'function' && botActiveFor_(row[COLS.CHAT_ID - 1])) {
     const heard = parseStamp_(row[COLS.RECEIVED - 1]) || new Date();
     if ((new Date().getTime() - heard.getTime()) / 60000 < STAGE3.ORPHAN_WAIT_MIN) {
       if (!row[COLS.NOTES - 1]) sheet.getRange(rowNum, COLS.NOTES).setValue('ממתין לטקסט משלים...');
@@ -1155,6 +1156,10 @@ function localMikvehMatch_(text, list) {
     if (city) (byCity[city] = byCity[city] || {})[m.name] = true;
   });
   let names = Object.keys(hits);
+  // השם הוא גם יישוב עם כמה מקוואות ("עלי": המקווה "עלי", וגם "עלי - היובל"
+  // ו"עלי - פלגי מים") — לא מנחשים, הבוט ישאל עם רשימה.
+  const cityMany = Object.keys(cands).some(function (c) { return byCity[c] && Object.keys(byCity[c]).length > 1; });
+  if (cityMany) return '';
   if (!names.length) {
     // שם יישוב שיש בו מקווה אחד בלבד
     Object.keys(cands).forEach(function (c) {
