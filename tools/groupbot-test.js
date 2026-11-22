@@ -18,6 +18,13 @@ const DAVID = '972508888888@c.us';
 
 // מה ג'מיני "מחזיר" לכל טקסט (לפי מה שבין <<< >>> בפרומפט)
 const GEMINI = {
+  // 22/11 09:06 (חנוך גולד) — ג'מיני לא זיהה את "עלי" כמקום
+  'עלי קידוח השוקה במקום שאחרי זה צריך להיות תעלה המשכה': { is_report: true, defect_type: 'תחזוקה', summary: 'ביצוע קידוח שוקה במקום המיועד לתעלה המשכה.' },
+  'עלי זהב בדיקת גג': { is_report: true, defect_type: 'בדיקה שוטפת', summary: 'בדיקת גג' },
+  'עלי לבדוק את זה מחר': { is_report: true, defect_type: 'אחר', summary: 'תכנון' },
+  'תמונה מאור עקיבא': { is_report: true, settlement: 'אור עקיבא', summary: 'תמונה' },
+  'עפולה קידוח': { is_report: true, summary: 'קידוח' },
+  'גג תקין': { is_report: true, summary: 'גג' },
   'מתי בודקים בכפר סבא?': { is_report: false, mikveh_name: 'מקווה כפר סבא', summary: 'שאלה' },
   'מתי בודקים באשבול?': { is_report: false, mikveh_name: 'מקווה אשבול', summary: 'שאלה' },
   'זה לא אשבול': { is_report: true, mikveh_name: 'מקווה אשבול', summary: 'תיקון' },
@@ -45,7 +52,9 @@ function setup(mode) {
   ss._add('רשימת מיקומים', [['שם', 'עיר'],
     ['מקווה תושיה', 'תושיה'], ['מקווה אור עקיבא מרכז', 'אור עקיבא'], ['מקווה אור עקיבא צפון', 'אור עקיבא'],
     ['מקווה כפר סבא', 'כפר סבא'], ['מקווה אשבול', 'אשבול'],
-    ['מקווה עין גב', 'עין גב'], ['מקווה עין-גב', 'עין גב'], ['עפולה - כורש', 'עפולה']]);
+    ['מקווה עין גב', 'עין גב'], ['מקווה עין-גב', 'עין גב'], ['עפולה - כורש', 'עפולה'],
+    ['עלי', 'עלי'], ['עלי - היובל', 'עלי'], ['עלי - פלגי מים', 'עלי'], ['עלי זהב', 'עלי זהב'],
+    ['עפולה - נוף יזרעאל', 'עפולה'], ['עפולה - נוף יזרעאל', 'עפולה']]);
   ss._add('משתמשים', [['מזהה', 'שם', 'אימייל', 'טלפון', 'תפקיד', 'פעיל'],
     ['u2', 'יוסי כהן', '', '0509999999', 'מפקח', 'כן']]);
   ss._add('אוצר זריעה', [new Array(22).fill('כותרת')]);
@@ -636,6 +645,123 @@ box.__ss.getSheetByName('יומן דיווחים').appendRow([stamp, 'יוסי',
 const orPic = msg(box, YOSSI, 'יוסי', '', { image: true });
 age(box, orPic.id, 1); tick(box);
 check('דיווח ישן — התמונה מוצמדת אליו בשקט', /הוצמד/.test(note(box, orPic.id)) && box.sent.length === 0, [note(box, orPic.id), box.sent]);
+
+// =====================================================================
+// 22/11: תמונה עם כיתוב נשאלה אחרי דקה; "עלי" לא זוהה
+// =====================================================================
+const HANOCH = '972539475764@c.us';
+const ELI_CAP = 'עלי קידוח השוקה במקום שאחרי זה צריך להיות תעלה המשכה';
+
+console.log('\n— רגרסיה: הבוקר (חנוך גולד, עלי) —');
+box = setup('1');
+const e1 = msg(box, HANOCH, 'חנוך גולד', ELI_CAP, { image: true });
+const eMore = [0, 1, 2, 3].map(() => msg(box, HANOCH, 'חנוך גולד', '', { image: true }));
+age(box, e1.id, 1.0); eMore.forEach((m, i) => age(box, m.id, 0.7 - i * 0.05));
+tick(box); // 09:06 — כאן בפועל הבוט שאל
+check('דקה אחרי: שקט', box.sent.length === 0, box.sent);
+check('התמונה עם הכיתוב ממתינה', /ממתין/.test(note(box, e1.id)), note(box, e1.id));
+age(box, e1.id, 5.2); eMore.forEach((m, i) => age(box, m.id, 4.9 - i * 0.05));
+tick(box);
+out = to(box, GROUP);
+check('אחרי 5 דקות: שאלה אחת עם רשימת מקוואות עלי', out.length === 1 &&
+  /בעלי יש 3 מקוואות/.test(out[0].message) && /1\. עלי\n2\. עלי - היובל\n3\. עלי - פלגי מים/.test(out[0].message), out);
+check('"עלי זהב" אינו ברשימה', out[0] && !/עלי זהב/.test(out[0].message));
+check('לא "לא צוין באיזה מקווה"', out[0] && !/לא צוין/.test(out[0].message));
+eMore.forEach((m, i) => age(box, m.id, 5.3 - i * 0.05));
+tick(box);
+check('ארבע התמונות הנוספות — בלי שאלה נוספת', to(box, GROUP).length === 1, box.sent);
+box.sent.length = 0;
+const eAns = msg(box, HANOCH, 'חנוך גולד', '2', { quoted: 'BOT1' });
+check('תשובה "2" — מיידית', eAns.res.status === 'bot_answer', eAns.res);
+check('שויך לעלי - היובל', logRow(box, e1.id)[4] === 'עלי - היובל', logRow(box, e1.id));
+check('כל חמש התמונות עברו לתיקיית עלי - היובל', box.moves.length === 5 && box.moves.every((m) => /עלי - היובל/.test(m.to)), box.moves.length);
+
+console.log('\n— תמונה עם כיתוב, ושם המקווה נכתב אחריה: שיוך שקט —');
+box = setup('1');
+const c1 = msg(box, HANOCH, 'חנוך גולד', ELI_CAP, { image: true });
+const c2 = msg(box, HANOCH, 'חנוך גולד', 'עלי - פלגי מים');
+age(box, c1.id, 1); age(box, c2.id, 0.5); tick(box);
+age(box, c1.id, 5.2); tick(box);
+check('בלי שום הודעה', box.sent.length === 0, box.sent);
+check('שויך לעלי - פלגי מים', logRow(box, c1.id)[4] === 'עלי - פלגי מים' && /לפי הודעה סמוכה/.test(logRow(box, c1.id)[11]), logRow(box, c1.id));
+
+console.log('\n— עיר מרובת מקוואות (ג\'מיני), ומקווה סמוך מתוך הרשימה: שיוך שקט —');
+box = setup('1');
+const a1 = msg(box, YOSSI, 'יוסי', 'תמונה מאור עקיבא', { image: true });
+const a2 = msg(box, YOSSI, 'יוסי', 'מקווה אור עקיבא צפון'); // נשלח חצי דקה אחרי התמונה
+age(box, a1.id, 1); age(box, a2.id, 0.5); tick(box);         // הטקסט מעובד, התמונה ממתינה
+age(box, a1.id, 5.2); tick(box);
+check('בלי הודעה, ושויך לצפון', box.sent.length === 0 && logRow(box, a1.id)[4] === 'מקווה אור עקיבא צפון', [box.sent, logRow(box, a1.id)]);
+
+console.log('\n— עיר מרובת מקוואות, ומקווה סמוך שאינו מהרשימה: שואלים —');
+box = setup('1');
+const b1 = msg(box, YOSSI, 'יוסי', 'תמונה מאור עקיבא', { image: true });
+const b2 = msg(box, YOSSI, 'יוסי', 'מקווה כפר סבא');
+age(box, b1.id, 1); age(box, b2.id, 0.5); tick(box);
+age(box, b1.id, 5.2); tick(box);
+check('שאלה עם הרשימה, בלי שיוך', to(box, GROUP).length === 1 && /אור עקיבא/.test(to(box, GROUP)[0].message) && !logRow(box, b1.id)[4], [box.sent, logRow(box, b1.id)]);
+
+console.log('\n— שם שהוא גם יישוב עם כמה מקוואות —');
+box = setup('1');
+const L2 = box.getMikvehList_();
+check('"עלי" לבד — אין שיוך מקומי', box.localMikvehMatch_('עלי', L2) === '');
+check('"בעלי" לבד — אין שיוך מקומי', box.localMikvehMatch_('בעלי', L2) === '');
+check('"עלי - היובל" — שיוך', box.localMikvehMatch_('עלי - היובל', L2) === 'עלי - היובל');
+check('"עלי זהב" — שיוך', box.localMikvehMatch_('עלי זהב', L2) === 'עלי זהב');
+check('שם כפול ברשימה ("עפולה - נוף יזרעאל" פעמיים) — עדיין שם אחד', box.localMikvehMatch_('עפולה - נוף יזרעאל', L2) === 'עפולה - נוף יזרעאל');
+const lone2 = msg(box, YOSSI, 'יוסי', 'עלי');
+age(box, lone2.id, 2); tick(box);
+check('"עלי" לבד אינו הצהרה', !logRow(box, lone2.id)[4] || logRow(box, lone2.id)[12] !== 'כן', logRow(box, lone2.id));
+const lonePic = msg(box, YOSSI, 'יוסי', '', { image: true });
+age(box, lonePic.id, 5.2); tick(box);
+check('ואז תמונה: הבוט שואל, בלי שיוך', to(box, GROUP).length === 1 && box.moves.length === 0, [box.sent, box.moves]);
+box.sent.length = 0;
+msg(box, YOSSI, 'יוסי', 'עלי', { quoted: 'BOT1' });
+tick(box);
+check('תשובה "עלי" לשאלה — לא משויכת בניחוש', !box.sent.some((b) => /✅/.test(b.message)), box.sent);
+
+console.log('\n— כיתוב שמתחיל במקווה יחיד: שאלת אישור —');
+box = setup('1');
+const z1 = msg(box, YOSSI, 'יוסי', 'עלי זהב בדיקת גג', { image: true });
+age(box, z1.id, 5.2); tick(box);
+out = to(box, GROUP);
+check('"האם מדובר במקווה עלי זהב?"', out.length === 1 && /האם מדובר במקווה \*עלי זהב\*/.test(out[0].message), out);
+check('עוד לא שויך', !logRow(box, z1.id)[4]);
+box.sent.length = 0;
+const yes = msg(box, YOSSI, 'יוסי', 'כן', { quoted: 'BOT1' });
+check('"כן" — מאושר מיד', yes.res.status === 'bot_answer' && logRow(box, z1.id)[4] === 'עלי זהב', [yes.res, logRow(box, z1.id)]);
+check('אישור בקבוצה', to(box, GROUP).length === 1 && /✅ שויך למקווה \*עלי זהב\*/.test(to(box, GROUP)[0].message), box.sent);
+
+box = setup('1');
+const z2 = msg(box, YOSSI, 'יוסי', 'עלי זהב בדיקת גג', { image: true });
+age(box, z2.id, 5.2); tick(box);
+box.sent.length = 0;
+msg(box, YOSSI, 'יוסי', 'לא', { quoted: 'BOT1' });
+tick(box);
+check('"לא" — לא משויך, והבוט מבקש שם', !logRow(box, z2.id)[4] && to(box, GROUP).length === 1 && /לא מצאתי מקווה בשם/.test(to(box, GROUP)[0].message), [box.sent, logRow(box, z2.id)]);
+
+console.log('\n— בלי רעש —');
+box = setup('1');
+const nz = msg(box, YOSSI, 'יוסי', 'עלי לבדוק את זה מחר');
+tick(box);
+check('טקסט שמתחיל ב"עלי" בלי מדיה ובלי פעולה — הבוט שותק', box.sent.length === 0, box.sent);
+const plain = msg(box, YOSSI, 'יוסי', 'גג תקין', { image: true });
+age(box, plain.id, 5.2); tick(box);
+check('כיתוב בלי שם מקום — עדיין "לא צוין באיזה מקווה"', to(box, GROUP).length === 1 && /לא צוין/.test(to(box, GROUP)[0].message), box.sent);
+
+console.log('\n— תמונה עם כיתוב ומקווה מזוהה: ממתינה, ואז נרשמת בשקט —');
+box = setup('1');
+const ok1 = msg(box, YOSSI, 'יוסי', 'בדיקה בתושיה', { image: true });
+age(box, ok1.id, 1); tick(box);
+check('בדקה הראשונה — עוד לא ביומן', !logRow(box, ok1.id).length, logRow(box, ok1.id));
+age(box, ok1.id, 5.2); tick(box);
+check('אחרי 5 דקות — ביומן עם המקווה, בלי הודעה', logRow(box, ok1.id)[4] === 'מקווה תושיה' && box.sent.length === 0, [logRow(box, ok1.id), box.sent]);
+
+console.log('\n— הבוט כבוי: תמונה עם כיתוב מעובדת מיד, כמו קודם —');
+box = setup('');
+const off1 = msg(box, YOSSI, 'יוסי', 'בדיקה בתושיה', { image: true });
+age(box, off1.id, 0.5); tick(box);
+check('ביומן מיד, בלי הודעות', logRow(box, off1.id)[4] === 'מקווה תושיה' && box.sent.length === 0, logRow(box, off1.id));
 
 console.log('\n' + (fail ? '❌' : '✅') + ' ' + pass + ' עברו, ' + fail + ' נכשלו');
 process.exit(fail ? 1 : 0);

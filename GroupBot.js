@@ -69,6 +69,9 @@ const BOT_TEXT = {
       options.map(function (o, i) { return (i + 1) + '. ' + o; }).join('\n') +
       '\nלאיזה מהם הכוונה?\n\n↩️ יש להשיב *בתשובה להודעה הזו* עם המספר או השם.';
   },
+  confirm: function (name, mikveh) {
+    return '❓ ' + name + ', האם מדובר במקווה *' + mikveh + '*?\n\n↩️ יש להשיב *בתשובה להודעה הזו*: כן, או את שם המקווה הנכון.';
+  },
   missing: function (name) {
     return '❓ ' + name + ', לא צוין באיזה מקווה מדובר.\nלאיזה מקווה הכוונה?\n\n' + BOT_TEXT.REPLY_HINT;
   },
@@ -176,12 +179,22 @@ function botAsk_(queueRow, logRowNum, result, hasMedia, logId) {
 
     // לא צוין שום מקום, אבל אותו שולח כתב שם מקווה בהודעה סמוכה ("אשבול"
     // אחרי ההקלטה, או מקווה שכבר שויך בתשובה לבוט) — משייכים בשקט, בלי לשאול.
-    if (kind === 'media' || kind === 'missing') {
+    // עיר מרובת מקוואות: רק אם המקווה שבהודעה הסמוכה הוא אחד מהאפשרויות.
+    if (kind === 'media' || kind === 'missing' || (kind === 'ambiguous' && options.length)) {
       const near = botNeighborMikveh_(phone, parseStamp_(queueRow[COLS.RECEIVED - 1]), logRowNum);
-      if (near) {
+      if (near && (kind !== 'ambiguous' || options.indexOf(near) >= 0)) {
         const done = botAssignLog_(getSheet_(CONFIG.REPORT_SHEET), logRowNum, near, 'מזוהה (לפי הודעה סמוכה)', result, chatId);
         return 'שויך לפי הודעה סמוכה: ' + near + (done.notes.length ? ' | ' + done.notes.join(' | ') : '');
       }
+    }
+
+    // ג'מיני לא מצא מקום, אבל הכיתוב מתחיל בשם מקום מהרשימה ("עלי קידוח...") —
+    // שואלים עם הרשימה של אותו מקום (או שאלת אישור למקווה יחיד), לא "לא צוין".
+    let guessCity = '';
+    if ((kind === 'media' || kind === 'missing') && !result.settlement) {
+      const g = botLeadingPlace_(String(queueRow[COLS.TEXT - 1] || ''), list);
+      if (g && g.options.length > 1) { kind = 'ambiguous'; options = g.options; guessCity = g.city; }
+      else if (g && g.options.length === 1) { kind = 'confirm'; options = g.options; }
     }
 
     const sh = botSheet_();
@@ -195,7 +208,8 @@ function botAsk_(queueRow, logRowNum, result, hasMedia, logId) {
     const realName = botDisplayName_(queueRow);
     const name = mention ? mention.tag : realName;
     let text;
-    if (kind === 'ambiguous') text = BOT_TEXT.ambiguous(name, result.settlement, options);
+    if (kind === 'ambiguous') text = BOT_TEXT.ambiguous(name, guessCity || result.settlement, options);
+    else if (kind === 'confirm') text = BOT_TEXT.confirm(name, options[0]);
     else if (kind === 'unknown') text = BOT_TEXT.unknown(name, result.settlement);
     else if (kind === 'media') text = BOT_TEXT.media(name, BOT_MEDIA_WHAT[String(queueRow[COLS.TYPE - 1] || '')] || 'התקבל קובץ');
     else text = BOT_TEXT.missing(name);
@@ -249,8 +263,44 @@ function botSayMention_(chatId, text, quotedMessageId, mentionChatId) {
 }
 
 function botCityOptions_(list, city) {
+  const seen = {};
   return list.filter(function (m) { return m.city === city; })
-    .map(function (m) { return m.name; }).slice(0, BOT.MAX_OPTIONS);
+    .map(function (m) { return m.name; })
+    .filter(function (n) { if (seen[n]) return false; seen[n] = true; return true; })
+    .slice(0, BOT.MAX_OPTIONS);
+}
+
+/**
+ * כיתוב שמתחיל בשם של מקום מהרשימה ("עלי קידוח השוקה...", "בעלי זהב...") —
+ * רק כשג'מיני לא מצא מקום. מחזיר { city, options }: כמה מקוואות ⟵ רשימה ממוספרת;
+ * מקווה אחד ⟵ שאלת אישור. לעולם לא משייך לבד ("עלי" היא גם מילה רגילה).
+ */
+function botLeadingPlace_(text, list) {
+  const words = mikvehNorm_(text).split(' ').filter(Boolean);
+  if (!words.length) return null;
+  const names = {}, cities = {};
+  list.forEach(function (m) {
+    const n = mikvehNorm_(m.name).replace(/^(מקווה|מקוה)\s+/, '');
+    (names[n] = names[n] || {})[m.name] = true;
+    const c = mikvehNorm_(m.city);
+    if (c) (cities[c] = cities[c] || { city: m.city, set: {} }).set[m.name] = true;
+  });
+  for (let n = Math.min(4, words.length); n >= 1; n--) {
+    const pre = words.slice(0, n).join(' ').replace(/^(במקווה|במקוה|מקווה|מקוה)\s+/, '');
+    const forms = [pre];
+    if (/^[בה]\S/.test(pre)) forms.push(pre.slice(1));
+    for (let i = 0; i < forms.length; i++) {
+      const f = forms[i];
+      if (f.length < 2) continue;
+      if (cities[f] && Object.keys(cities[f].set).length > 1) {
+        return { city: cities[f].city, options: botCityOptions_(list, cities[f].city) };
+      }
+      const exact = names[f] ? Object.keys(names[f]) : (cities[f] ? Object.keys(cities[f].set) : []);
+      if (exact.length === 1) return { city: '', options: exact };
+      if (exact.length > 1) return { city: f, options: exact.slice(0, BOT.MAX_OPTIONS) };
+    }
+  }
+  return null;
 }
 
 /** השאלות הפתוחות (עד OPEN_HOURS), החדשה ראשונה, עם מספר השורה */
@@ -358,6 +408,10 @@ function botResolve_(answer, q, noGemini) {
     const idx = +n[1] - 1;
     if (idx >= 0 && idx < q.options.length) return { mikveh: q.options[idx] };
   }
+
+  // שאלת אישור ("האם מדובר במקווה X?") — "כן" מאשר
+  if (q.kind === 'confirm' && q.options && q.options.length === 1 &&
+      /^(כן|נכון|אכן|בדיוק|כן כן|כן נכון|נכון מאוד)[\s!.,]*$/.test(t)) return { mikveh: q.options[0] };
 
   const list = getMikvehList_();
   const norm = mikvehNorm_;
