@@ -1187,6 +1187,10 @@
     if (!rows.length) { alert('אין נתונים לייצוא'); return; }
     const stamp = new Date().toISOString().slice(0, 10);
     const name = fileBase.replace(/[^\w-]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '') + '-' + stamp;
+    // מדידה: איזה דוח (שם הקובץ — תמיד כללי ובאנגלית, למשל tasks או actions-mikveh,
+    // ולעולם לא שם מקווה), כמה שורות, ובאיזה פורמט יצא בפועל
+    const report = name.slice(0, -stamp.length - 1).toLowerCase().slice(0, 40) || 'other';
+    const track = (format) => { if (window.MikvehAnalytics) MikvehAnalytics.track('export_excel', { report, rows: rows.length, format }); };
     loadXlsx().then((XLSX) => {
       const ws = XLSX.utils.json_to_sheet(rows);
       const keys = Object.keys(rows[0]);
@@ -1195,12 +1199,14 @@
       wb.Workbook = { Views: [{ RTL: true }] };
       XLSX.utils.book_append_sheet(wb, ws, sheetName.slice(0, 30));
       XLSX.writeFile(wb, name + '.xlsx');
+      track('xlsx');
     }).catch(() => {
       // ללא רשת: CSV עם BOM (נפתח באקסל עם עברית תקינה)
       const keys = Object.keys(rows[0]);
       const q = (v) => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
       const csv = '\ufeff' + keys.map(q).join(',') + '\n' + rows.map((r) => keys.map((k) => q(r[k])).join(',')).join('\n');
       download(new Blob([csv], { type: 'text/csv;charset=utf-8' }), name + '.csv');
+      track('csv');
     });
   }
   const L = () => (S.data.meta && S.data.meta.fieldLabels) || {};

@@ -139,8 +139,14 @@ async function open(browser, conn, session, noFirebase) {
       await t.page.waitForTimeout(400);
     }
     await t.page.evaluate(() => MikvehAnalytics.action('addAction'));
+    // ייצוא לאקסל: פעם כש-xlsx נטען, ופעם בלי (נפילה ל-CSV)
+    await t.page.evaluate(() => { window.XLSX = { utils: { json_to_sheet: () => ({}), book_new: () => ({}), book_append_sheet: () => {} }, writeFile: () => {} }; });
+    await t.page.evaluate(() => MK.exportTable([{ 'שם המקוה': 'מקווה הדגמה' }, { 'שם המקוה': 'מקווה הדגמה' }], 'פעולות', 'actions-mikveh'));
+    await t.page.evaluate(() => { delete window.XLSX; });
+    await t.ctx.route(/cdnjs\.cloudflare\.com\/ajax\/libs\/xlsx/, (r) => r.abort());
+    await t.page.evaluate(() => MK.exportTable([{ 'מקווה': 'מקווה הדגמה' }], 'משימות', 'tasks'));
     // gtag שולח באצווה, כמה שניות אחרי האירוע
-    for (let i = 0; i < 30 && !/en=add_action/.test(t.seen.hits.join('\n')); i++) await t.page.waitForTimeout(500);
+    for (let i = 0; i < 30 && (t.seen.hits.join('\n').match(/en=export_excel/g) || []).length < 2; i++) await t.page.waitForTimeout(500);
     const all = t.seen.hits.join('\n');
     if (process.env.DEBUG) console.log(all);
     check('נטען SDK', t.seen.sdk.length >= 2, t.seen.sdk);
@@ -150,6 +156,8 @@ async function open(browser, conn, session, noFirebase) {
     check('דיון נרשם כ-talk/thread', /talk\/thread/.test(all));
     check('נרשמה כניסה', /en=login/.test(all));
     check('נרשמה פעולה add_action', /en=add_action/.test(all));
+    check('ייצוא לאקסל: דוח הפעולות, 2 שורות, xlsx', /en=export_excel[^\n]*ep\.report=actions-mikveh[^\n]*epn\.rows=2[^\n]*ep\.format=xlsx|en=export_excel[^\n]*ep\.format=xlsx[^\n]*ep\.report=actions-mikveh/.test(all.replace(/&(?=en=)/g, '\n')));
+    check('ייצוא בלי ספריית האקסל: tasks כ-csv', /ep\.report=tasks/.test(all) && /ep\.format=csv/.test(all));
     check('נשלח תפקיד', /מפקח/.test(all));
     check('אין מזהה מקווה', !/mk77/.test(all));
     check('אין שם מקווה', !/מקווה הדגמה/.test(all));
