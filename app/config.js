@@ -14,11 +14,11 @@ window.MIKVEH_CONFIG = {
   googleClientId: '',
   // Firebase Analytics (מדידת שימוש). הערכים מ-Firebase Console ⇠ Project settings ⇠
   // Your apps ⇠ Web app. ריק = המדידה כבויה ושום קוד של Firebase אינו נטען.
-  // אלה מזהים ציבוריים ולא סודות. בפרסום הם מוזרקים מה-Variables של הריפו.
-  firebaseApiKey: '',
-  firebaseProjectId: '',
-  firebaseAppId: '',
-  firebaseMeasurementId: '',
+  // אלה מזהים ציבוריים ולא סודות. Variables בשם MIKVEH_FIREBASE_* בריפו, אם יוגדרו, גוברים עליהם.
+  firebaseApiKey: 'AIzaSyAxLMeWsBopaNQISh39KFTMVOtyo09dX7M',
+  firebaseProjectId: 'mikveh-automation',
+  firebaseAppId: '1:252546024159:web:ef36f78d748bbc6b629f6a',
+  firebaseMeasurementId: 'G-5605J0Y6FQ',
 };
 
 /**

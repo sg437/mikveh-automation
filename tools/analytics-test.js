@@ -60,8 +60,14 @@ const check = (name, cond, extra) => {
 const FB = { firebaseApiKey: 'AIzaTEST', firebaseProjectId: 'mikveh-test', firebaseAppId: '1:1:web:1', firebaseMeasurementId: 'G-TEST000001' };
 
 /** הקשר דפדפן עם הגדרות, ותפיסת כל מה שהולך ל-Firebase/Google. */
-async function open(browser, conn, session) {
+async function open(browser, conn, session, noFirebase) {
   const ctx = await browser.newContext({ serviceWorkers: 'block' });
+  // config.js בריפו כבר מחזיק פרויקט אמיתי; כאן מחליפים אותו בפרויקט בדיקה, או מרוקנים
+  await ctx.route(/\/config\.js$/, async (r) => {
+    const res = await r.fetch();
+    const body = (await res.text()).replace(/(firebase\w+:\s*')[^']*(')/g, (m, a, b) => a + (noFirebase ? '' : 'TEST') + b);
+    return r.fulfill({ response: res, body });
+  });
   const seen = { sdk: [], hits: [] };
   await ctx.route(/gstatic\.com\/firebasejs\//, (r) => { seen.sdk.push(r.request().url()); return r.continue(); });
   await ctx.route(/firebase(installations)?\.googleapis\.com/, (r) => {
@@ -97,7 +103,7 @@ async function open(browser, conn, session) {
 
   console.log('— בלי פרטי Firebase: המדידה כבויה —');
   {
-    const t = await open(browser, { apiUrl: api }, session);
+    const t = await open(browser, { apiUrl: api }, session, true);
     await t.page.goto('http://localhost:' + PORT + '/index.html');
     await t.page.waitForSelector('#navCountList:not(:empty)', { timeout: 20000 });
     await t.page.evaluate(() => { location.hash = '#/tasks'; });
