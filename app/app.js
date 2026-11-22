@@ -198,7 +198,7 @@
       if (!navigator.onLine) return Promise.reject(new Error('אין חיבור לאינטרנט'));
       return fetch(url, { method: 'POST', redirect: 'follow', cache: 'no-store', body: JSON.stringify({ action, user: getUser(), token: token || '', data }) })
         .then((r) => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
-        .then((d) => { if (d.error) { const e = new Error(d.error); e.code = d.code; e.payload = d; throw e; } return d; });
+        .then((d) => { if (d.error) { const e = new Error(d.error); e.code = d.code; e.payload = d; throw e; } if (window.MikvehAnalytics) MikvehAnalytics.action(action); return d; });
     }
   };
 
@@ -227,6 +227,7 @@
       }
       const l = this.list(); l.push({ id, action, data, ts: iso(now), user: u });
       this.save(l);
+      if (window.MikvehAnalytics) MikvehAnalytics.queued(action);
       return { ok: true, queued: true, record };
     },
     /** שולח את מה שממתין (כשיש חיבור) */
@@ -436,6 +437,7 @@
     const h = location.hash || '#/';
     const parts = h.replace(/^#\/?/, '').split('/');
     const view = parts[0] || 'home';
+    if (window.MikvehAnalytics) MikvehAnalytics.screen(h);
     document.querySelectorAll('.view').forEach((v) => v.classList.remove('on'));
     document.querySelectorAll('nav a').forEach((a) => a.classList.toggle('on', a.dataset.view === (view === 'm' ? 'list' : view)));
     document.body.classList.remove('nav-open');
@@ -1432,6 +1434,8 @@
       return;
     }
     applyData(data);
+    // מדידת שימוש — רק מכאן, אחרי שהמערכת נפתחה למשתמש (לא במסך הנעילה)
+    if (window.MikvehAnalytics) MikvehAnalytics.start();
     if (!booted) {
       booted = true;
       initOnce();

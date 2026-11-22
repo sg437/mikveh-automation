@@ -144,6 +144,7 @@ body:has(.modal-bg:not([hidden])) .toast{bottom:var(--s4)}
 .toolbar{background:var(--card);border:1px solid var(--line);border-radius:var(--radius-lg);
   padding:var(--s3);margin-bottom:var(--s4);box-shadow:var(--shadow)}
 .toolbar .row{display:flex;gap:var(--s2);flex-wrap:wrap;align-items:end}
+.toolbar .chips + .row{margin-top:var(--s3)}
 .field{display:flex;flex-direction:column;gap:3px;min-width:130px;flex:1}
 .field.grow{flex:3;min-width:100%}
 .field label{font-size:var(--fs-0);font-weight:600;color:var(--muted)}
@@ -1080,6 +1081,7 @@ body.locked{padding-bottom:0}
 <div class="toast" id="toast" hidden></div>
 
 <script src="../config.js"></script>
+<script src="../analytics.js"></script>
 <script src="../hebdate.js"></script>
 <!-- data.js (עותק גיבוי, ~3.6MB) נטען לפי דרישה מתוך app.js ולא חוסם את הפתיחה -->
 <script src="../app.js"></script>

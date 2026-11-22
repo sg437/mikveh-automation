@@ -3,9 +3,9 @@
    לצד "מקוואות", במקום לראות בה את אותה אפליקציה. הקבצים המשותפים
    נטענים מהתיקייה שמעל (../), ולכן גם הם נשמרים כאן במטמון.
    להעלות גרסה בכל שינוי. data.js (~3.6MB) אינו ברשימה – הוא רק עותק גיבוי. */
-const CACHE = 'mikveh-talk-v12';
+const CACHE = 'mikveh-talk-v13';
 const FILES = ['./', './index.html', './manifest.json',
-  '../app.js', '../forms.js', '../talk.js', '../work.js', '../media.js', '../edit.js', '../setup.js',
+  '../analytics.js', '../app.js', '../forms.js', '../talk.js', '../work.js', '../media.js', '../edit.js', '../setup.js',
   '../perms.js', '../projects.js', '../contractor.js', '../auth.js', '../config.js', '../hebdate.js',
   '../talk-icon-192.png', '../talk-icon-512.png', '../talk-icon-maskable-512.png'];
 
@@ -35,6 +35,9 @@ self.addEventListener('activate', (e) => {
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return;
   const url = new URL(e.request.url);
+  // מדידת השימוש (Firebase Analytics) עוברת ישר לרשת: אין מה לשמור ממנה,
+  // ותשובות אטומות (opaque) שלה היו תופסות מקום במטמון הנתונים לחינם.
+  if (/(^|\.)(google-analytics\.com|googletagmanager\.com|analytics\.google\.com|firebaseinstallations\.googleapis\.com|firebase\.googleapis\.com)$/.test(url.hostname)) return;
   // סיווג מפורש ולא לפי request.destination: ל-fetch() רגיל (וכך נטענים
   // הנתונים מהגיליון) ה-destination הוא מחרוזת ריקה, ולא 'empty' כפי שנראה
   // מהשם – וסיווג לפי זה שלח את הנתונים למסלול של קבצי האפליקציה.

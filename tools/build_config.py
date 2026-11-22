@@ -11,6 +11,13 @@
     MIKVEH_API_TOKEN         רק אם הוגדר API_TOKEN ב-Script Properties
     MIKVEH_GOOGLE_CLIENT_ID  לא חובה — מגיע ממילא מהסקריפט
 
+ולמדידת שימוש ב-Firebase Analytics (לא חובה; בלי שלושת הראשונים המדידה כבויה):
+
+    MIKVEH_FIREBASE_API_KEY         apiKey של אפליקציית ה-Web בפרויקט ה-Firebase
+    MIKVEH_FIREBASE_PROJECT_ID      projectId
+    MIKVEH_FIREBASE_APP_ID          appId
+    MIKVEH_FIREBASE_MEASUREMENT_ID  measurementId (G-...)
+
 שימו לב: האתר ציבורי, ולכן כל מה שנכתב כאן גלוי לכל מי שפותח את הקוד —
 גם הטוקן. הוא אינו הגנה על הנתונים; ההגנה היא הכניסה עם Google, שנאכפת
 בשרת (Api.js, REQUIRE_LOGIN).
@@ -29,6 +36,10 @@ FIELDS = [
     ('apiUrl', 'MIKVEH_API_URL'),
     ('apiToken', 'MIKVEH_API_TOKEN'),
     ('googleClientId', 'MIKVEH_GOOGLE_CLIENT_ID'),
+    ('firebaseApiKey', 'MIKVEH_FIREBASE_API_KEY'),
+    ('firebaseProjectId', 'MIKVEH_FIREBASE_PROJECT_ID'),
+    ('firebaseAppId', 'MIKVEH_FIREBASE_APP_ID'),
+    ('firebaseMeasurementId', 'MIKVEH_FIREBASE_MEASUREMENT_ID'),
 ]
 
 
