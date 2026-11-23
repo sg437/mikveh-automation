@@ -1,0 +1,60 @@
+# מפרסם את האפליקציה (תיקיית app/) גם ב-Firebase Hosting, ומעדכן את כללי Firestore,
+# בכל דחיפה ל-main. הכתובת: https://mikveh-automation.web.app
+#
+# הפעלה חד-פעמית: Settings ⇠ Secrets and variables ⇠ Actions ⇠ Secrets ⇠ New repository secret
+#   FIREBASE_SA_B64 — מפתח חשבון השירות של Firebase (קובץ ה-JSON) בקידוד base64.
+# בלי הסוד ה-Workflow מדלג בשקט, והפרסום ל-GitHub Pages (pages.yml) אינו מושפע.
+name: פרסום ל-Firebase
+
+on:
+  push:
+    branches: [main]
+    paths: ['app/**', 'firebase.json', '.firebaserc', 'firestore.rules', 'firestore.indexes.json',
+      'tools/make_talk.py', 'tools/build_config.py', '.github/workflows/firebase.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: firebase
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      FIREBASE_SA_B64: ${{ secrets.FIREBASE_SA_B64 }}
+    steps:
+      - name: בדיקה שהסוד מוגדר
+        id: key
+        run: |
+          if [ -n "$FIREBASE_SA_B64" ]; then echo "ok=1" >> "$GITHUB_OUTPUT"
+          else echo "::notice::FIREBASE_SA_B64 אינו מוגדר — מדלגים על הפרסום ל-Firebase"; fi
+      - uses: actions/checkout@v5
+        if: steps.key.outputs.ok == '1'
+      # אותה הכנה כמו בפרסום ל-GitHub Pages: כתובת הגיליון ואפליקציית הדיונים
+      - name: הכנת האפליקציה
+        if: steps.key.outputs.ok == '1'
+        env:
+          MIKVEH_API_URL: ${{ vars.MIKVEH_API_URL }}
+          MIKVEH_API_TOKEN: ${{ vars.MIKVEH_API_TOKEN }}
+          MIKVEH_GOOGLE_CLIENT_ID: ${{ vars.MIKVEH_GOOGLE_CLIENT_ID }}
+          MIKVEH_FIREBASE_API_KEY: ${{ vars.MIKVEH_FIREBASE_API_KEY }}
+          MIKVEH_FIREBASE_PROJECT_ID: ${{ vars.MIKVEH_FIREBASE_PROJECT_ID }}
+          MIKVEH_FIREBASE_APP_ID: ${{ vars.MIKVEH_FIREBASE_APP_ID }}
+          MIKVEH_FIREBASE_MEASUREMENT_ID: ${{ vars.MIKVEH_FIREBASE_MEASUREMENT_ID }}
+        run: |
+          python3 tools/build_config.py
+          python3 tools/make_talk.py
+      - name: פרסום
+        if: steps.key.outputs.ok == '1'
+        run: |
+          umask 077
+          printf '%s' "$FIREBASE_SA_B64" | base64 -d > "$RUNNER_TEMP/firebase-sa.json"
+          export GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/firebase-sa.json"
+          npx --yes firebase-tools@15 deploy --only hosting --non-interactive
+          # כללי Firestore: רק אחרי שהמסד נוצר. כישלון כאן אינו מבטל את פרסום האתר.
+          npx --yes firebase-tools@15 deploy --only firestore:rules --non-interactive \
+            || echo "::warning::כללי Firestore לא עודכנו (המסד עוד לא נוצר?)"
+          rm -f "$RUNNER_TEMP/firebase-sa.json"

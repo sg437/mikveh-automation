@@ -68,6 +68,9 @@ function apiWritePost_(e, action) {
       if (!user) return jsonResponse_({ error: 'נדרשת כניסה עם Google', code: 'auth' });
       if (!authCan_(user, action)) return jsonResponse_({ error: 'אין לך הרשאה לפעולה זו (' + user.role + ')' });
       if (action === 'updateMe') { data._token = body.token; return jsonResponse_(authUpdateMe_(ss, data, user)); }
+      // התראות דחיפה: רישום המכשיר וביטולו (Firebase.js). לכל תפקיד, גם לצופה.
+      if (action === 'pushRegister') return jsonResponse_(pushRegister_(data, user));
+      if (action === 'pushUnregister') return jsonResponse_(pushUnregister_(data, user));
     } else {
       user = body.user || {};
       user.name = String(user.name || '').trim().slice(0, 80);

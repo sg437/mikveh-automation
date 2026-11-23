@@ -98,10 +98,21 @@ function authVerifyGoogle_(idToken) {
   return { sub: String(info.sub), email: String(info.email || '').toLowerCase(), name: String(info.name || info.email || '').trim(), picture: String(info.picture || '') };
 }
 
-/** כניסה. data: {idToken} */
+/**
+ * אימות הזהות שהאפליקציה שלחה: ID token של Google (idToken), או ID token של
+ * Firebase Authentication (firebaseToken, ראו Firebase.js). שתי הדרכים מחזירות
+ * אותו מבנה ואותו מזהה Google, כך שהמשתמש הוא אותו משתמש בשתיהן.
+ */
+function authVerifyIdentity_(d) {
+  d = d || {};
+  if (d.firebaseToken) return fbVerifyIdToken_(String(d.firebaseToken));
+  return authVerifyGoogle_(String(d.idToken || ''));
+}
+
+/** כניסה. data: {idToken} או {firebaseToken} */
 function authLogin_(ss, d) {
   let g;
-  try { g = authVerifyGoogle_(String(d.idToken || '')); } catch (err) { return { error: String(err.message || err) }; }
+  try { g = authVerifyIdentity_(d); } catch (err) { return { error: String(err.message || err) }; }
   const users = authUsers_(ss);
   let u = users.filter(function (x) { return x.googleId === g.sub || (x.email && x.email === g.email); })[0];
   const sh = authSheet_(ss, AUTH.USERS_SHEET, AUTH.USERS_HEADERS);
@@ -372,7 +383,7 @@ function authCan_(user, action) {
   if (['users', 'addUser', 'updateUser', 'setPerms', 'accessRequests', 'decideRequest', 'joinForm'].indexOf(action) >= 0) return false;
   // סגירת שאלה נשענת על אותה הרשאה כמו שליחתה (מי ששלח אותה, או מנהל)
   if (action === 'closeQuestion') action = 'askGroup';
-  if (['logout', 'updateMe'].indexOf(action) >= 0) return true;
+  if (['logout', 'updateMe', 'pushRegister', 'pushUnregister'].indexOf(action) >= 0) return true;
   const perms = authPerms_(apiSpreadsheet_());
   if (perms[action] && perms[action][role] !== undefined) return !!perms[action][role];
   return role !== 'צופה';
@@ -388,10 +399,11 @@ function phoneToChatId_(phone) {
 }
 
 /**
- * התראה אישית בוואטסאפ (גשר עד שיהיו התראות דחיפה). פעיל רק כש-NOTIFY_WHATSAPP=1.
- * לא זורק שגיאה.
+ * התראה אישית: התראת דחיפה למכשירים שהמשתמש הפעיל בהם התראות (Firebase.js),
+ * והודעת וואטסאפ כש-NOTIFY_WHATSAPP=1. שתיהן עצמאיות זו מזו. לא זורק שגיאה.
  */
 function notifyUsers_(users, text) {
+  pushNotifyUsers_(users, text);
   try {
     if (getProp_('NOTIFY_WHATSAPP') !== '1') return;
     const idInstance = getProp_('GREEN_ID_INSTANCE'), apiToken = getProp_('GREEN_API_TOKEN');

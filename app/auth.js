@@ -53,6 +53,7 @@
     K.$('#loginModal').hidden = false;
     const box = K.$('#gsiButton'); box.innerHTML = '<div class="hint">טוען את הכניסה של Google...</div>';
     // הערך מהשרת קודם: הוא תמיד הנכון. ההגדרה במכשיר נשארת כגיבוי בלבד.
+    if (loginMode() === 'firebase') { renderFirebaseLogin(box); return; }
     const cid = (K.S.data && K.S.data.googleClientId) || (window.MIKVEH_CONFIG || {}).googleClientId;
     if (!cid) {
       box.innerHTML = '<div class="fmsg bad">לא הוגדר מזהה Google. מנהל המערכת צריך להגדיר ' +
@@ -68,12 +69,61 @@
   }
   function closeLogin() { MK().$('#loginModal').hidden = true; }
 
-  let lastIdToken = '';
-  function loginWithToken(idToken) {
+  // ---- כניסה דרך Firebase Authentication ----
+  /**
+   * באיזו דרך נכנסים עם Google (loginWith ב-config.js). הכפתור של Google דורש
+   * שכתובת האתר תהיה רשומה ב-OAuth Client; באתר שב-Firebase Hosting היא אינה
+   * רשומה, ושם הכניסה עוברת דרך Firebase. השרת מאמת את שתיהן (Firebase.js),
+   * והמשתמש, הסשן וההרשאות זהים.
+   */
+  function loginMode() {
+    const K = MK(), want = (window.MIKVEH_CONFIG || {}).loginWith || 'auto';
+    if (!(window.MikvehFirebase && MikvehFirebase.enabled())) return 'google';
+    if (K.S.data && K.S.data.firebaseAuth === false) return 'google'; // השרת כיבה אותה
+    if (want === 'firebase' || want === 'google') return want;
+    return /\.(web\.app|firebaseapp\.com)$/.test(location.hostname) ? 'firebase' : 'google';
+  }
+  const FB_ERRORS = {
+    'auth/popup-blocked': 'הדפדפן חסם את חלון הכניסה. אשרו חלונות קופצים לאתר הזה ונסו שוב.',
+    'auth/unauthorized-domain': 'כתובת האתר הזו אינה מורשית לכניסה (Firebase ⟵ Authentication ⟵ Settings ⟵ Authorized domains).',
+    'auth/operation-not-allowed': 'הכניסה עם Google עדיין לא הופעלה בפרויקט ה-Firebase.',
+    'auth/configuration-not-found': 'הכניסה עם Google עדיין לא הופעלה בפרויקט ה-Firebase.',
+    'auth/network-request-failed': 'אין חיבור לאינטרנט.',
+  };
+  function renderFirebaseLogin(box) {
     const K = MK();
-    lastIdToken = idToken; // נשמר לבקשת גישה, שנשלחת עם אותה זהות מאומתת
+    box.innerHTML = '<button class="btn primary big" id="fbLogin" type="button" disabled>🔐 כניסה עם Google</button>';
+    const btn = K.$('#fbLogin'), msg = K.$('#loginMsg');
+    // ה-SDK נטען מראש, כדי שחלון הכניסה ייפתח ישר מתוך הלחיצה (אחרת הדפדפן חוסם אותו)
+    MikvehFirebase.use('auth').then((app) => {
+      const fa = window.firebase.auth(app);
+      btn.disabled = false;
+      btn.addEventListener('click', () => {
+        const provider = new window.firebase.auth.GoogleAuthProvider();
+        provider.setCustomParameters({ prompt: 'select_account' });
+        msg.textContent = ''; msg.className = 'fmsg';
+        fa.signInWithPopup(provider)
+          .then((r) => r.user.getIdToken())
+          .then((t) => {
+            // הסשן מנוהל בשרת שלנו (90 יום); Firebase נדרש רק כדי לאמת את הזהות
+            fa.signOut().catch(() => {});
+            return loginWithToken(t, 'firebase').catch(() => {}); // ההודעה כבר מוצגת
+          })
+          .catch((err) => {
+            if (err.code === 'auth/popup-closed-by-user' || err.code === 'auth/cancelled-popup-request') return;
+            msg.textContent = 'הכניסה נכשלה: ' + (FB_ERRORS[err.code] || err.message); msg.className = 'fmsg bad';
+          });
+      });
+    }).catch((err) => { box.innerHTML = '<div class="fmsg bad">' + esc(err.message) + '</div>'; });
+  }
+
+  let lastCred = {};
+  function loginWithToken(idToken, kind) {
+    const K = MK();
+    // נשמר לבקשת גישה, שנשלחת עם אותה זהות מאומתת
+    lastCred = kind === 'firebase' ? { firebaseToken: idToken } : { idToken: idToken };
     const msg = K.$('#loginMsg'); msg.textContent = 'מאמת מול Google...'; msg.className = 'fmsg';
-    return K.DataSource.postRaw('login', { idToken }).then((res) => {
+    return K.DataSource.postRaw('login', lastCred).then((res) => {
       saveSession({ token: res.token, user: res.user, expires: res.expires });
       msg.textContent = '';
       // כניסה ממסך הנעילה: הנתונים כלל לא נטענו (השרת סירב להגיש אותם),
@@ -119,7 +169,7 @@
       if (phone.replace(/\D/g, '').length < 9) { msg.textContent = 'מספר הטלפון אינו תקין'; msg.className = 'fmsg bad'; return; }
       msg.textContent = 'שולח...'; msg.className = 'fmsg';
       K.$('#jSend').disabled = true;
-      K.DataSource.postRaw('requestAccess', { idToken: lastIdToken, name, phone, note })
+      K.DataSource.postRaw('requestAccess', Object.assign({}, lastCred, { name, phone, note }))
         .then((res) => {
           box.innerHTML = res.status === 'exists'
             ? '<p>החשבון שלך כבר רשום במערכת. אפשר פשוט להיכנס.</p><button class="btn primary" id="jBack" type="button">לכניסה</button>'
@@ -135,6 +185,8 @@
 
   function logout() {
     const K = MK(), s = session();
+    // המכשיר מפסיק לקבל התראות של מי שיצא — לפני שהסשן נמחק
+    if (s && window.MikvehPush) MikvehPush.onLogout(s.token);
     if (s) K.DataSource.postRaw('logout', {}, s.token).catch(() => {});
     saveSession(null); renderUserButton();
     try { if (window.google && google.accounts) google.accounts.id.disableAutoSelect(); } catch (e) { /* ignore */ }
@@ -150,6 +202,7 @@
     const m = K.$('#userMenu');
     m.innerHTML = '<div class="um-head">' + (u.picture ? '<img class="avatar big" src="' + esc(u.picture) + '" alt="" referrerpolicy="no-referrer">' : '') + '<div><b>' + esc(u.name) + '</b><br><small>' + esc(u.email || '') + ' · ' + esc(u.role) + '</small></div></div>' +
       '<label for="umPhone">טלפון להתראות אישיות</label><div class="um-row"><input id="umPhone" type="tel" value="' + esc(u.phone || '') + '" placeholder="05x-xxxxxxx"><button class="btn small" id="umSavePhone" type="button">שמירה</button></div>' +
+      pushRow() +
       (u.role === 'מנהל' ? '<a class="btn" href="#/users" id="umUsers">👥 ניהול משתמשים</a>' : '') +
       '<button class="btn" id="umLogout" type="button">יציאה</button>';
     m.hidden = false;
@@ -159,7 +212,30 @@
       const phone = K.$('#umPhone').value.trim();
       K.DataSource.post('updateMe', { phone }).then(() => { const s = session(); s.user.phone = phone; saveSession(s); K.toast('הטלפון נשמר'); m.hidden = true; }).catch((err) => K.toast('לא נשמר: ' + err.message));
     });
+    bindPushRow(m);
     setTimeout(() => document.addEventListener('click', (e) => { if (!m.contains(e.target) && e.target !== K.$('#btnUser')) m.hidden = true; }, { once: true }), 0);
+  }
+
+  // ---- התראות במכשיר הזה (push.js) ----
+  /** מוצג רק כשהשרת מוגדר לשלוח התראות דחיפה. */
+  function pushRow() {
+    const P = window.MikvehPush;
+    if (!P || !P.offered()) return '';
+    if (!P.supported()) return '<label>התראות במכשיר הזה</label><div class="um-hint">' + P.why() + '</div>';
+    const on = P.isOn();
+    return '<label>התראות במכשיר הזה</label><div class="um-row"><span class="um-state" id="umPushState">' + (on ? '🔔 פעילות' : '🔕 כבויות') + '</span>' +
+      '<button class="btn small' + (on ? '' : ' primary') + '" id="umPush" type="button">' + (on ? 'כיבוי' : 'הפעלה') + '</button></div>';
+  }
+  function bindPushRow(m) {
+    const K = MK(), b = m.querySelector('#umPush'), P = window.MikvehPush;
+    if (!b) return;
+    b.addEventListener('click', () => {
+      const on = P.isOn();
+      b.disabled = true;
+      (on ? P.disable() : P.enable())
+        .then(() => { m.hidden = true; K.toast(on ? 'ההתראות במכשיר הזה כובו' : 'ההתראות הופעלו במכשיר הזה'); })
+        .catch((err) => { b.disabled = false; K.toast('ההתראות לא הופעלו: ' + err.message); });
+    });
   }
 
   // ---- ניהול משתמשים (מנהל) ----

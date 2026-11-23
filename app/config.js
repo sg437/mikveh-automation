@@ -19,6 +19,10 @@ window.MIKVEH_CONFIG = {
   firebaseProjectId: 'mikveh-automation',
   firebaseAppId: '1:252546024159:web:ef36f78d748bbc6b629f6a',
   firebaseMeasurementId: 'G-5605J0Y6FQ',
+  // איך נכנסים עם Google: 'google' = הכפתור של Google (ה-OAuth Client שבסקריפט),
+  // 'firebase' = דרך Firebase Authentication, 'auto' = Firebase רק באתר שב-Firebase Hosting
+  // (web.app / firebaseapp.com), שם ה-OAuth Client הישן אינו מורשה.
+  loginWith: 'auto',
 };
 
 /**

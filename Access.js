@@ -101,11 +101,11 @@ function accessRequests_(ss) {
 /**
  * ?action=requestAccess — בקשת גישה. אין כאן סשן (המבקש עדיין אינו משתמש),
  * ולכן הזהות נלקחת מה-ID token של גוגל ומאומתת מולה בכל בקשה.
- * d = { idToken, name, phone, note }
+ * d = { idToken או firebaseToken, name, phone, note }
  */
 function accessRequest_(ss, d) {
   let g;
-  try { g = authVerifyGoogle_(String((d && d.idToken) || '')); } catch (err) { return { error: String(err.message || err) }; }
+  try { g = authVerifyIdentity_(d); } catch (err) { return { error: String(err.message || err) }; }
 
   // כבר רשום ופעיל — אין מה לבקש, פשוט להיכנס
   const existing = authUsers_(ss).filter(function (u) { return u.googleId === g.sub || (u.email && u.email === g.email); })[0];

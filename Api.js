@@ -81,7 +81,7 @@ function apiHandle_(e, action) {
     const user = apiUser_(e);
     if (!user && apiRequireLogin_() && API.PRIVATE_ACTIONS.indexOf(action) >= 0) {
       return jsonResponse_({ error: 'נדרשת כניסה למערכת', code: 'login',
-        authEnabled: true, googleClientId: getProp_('GOOGLE_CLIENT_ID') || '' });
+        authEnabled: true, googleClientId: getProp_('GOOGLE_CLIENT_ID') || '', firebaseAuth: fbAuthEnabled_() });
     }
 
     // ---- API ציבורי לאתר (בלי טוקן): רק מידע שמיועד לציבור ----
@@ -123,7 +123,10 @@ function apiHandle_(e, action) {
         authEnabled: authEnabled_(),
         // ה-Client ID אינו סוד – הוא גלוי בכל דף שמציג כניסה עם Google. מסירת
         // הערך כאן חוסכת הקלדה של 72 תווים בכל מכשיר, מקור ל-invalid_client.
-        googleClientId: getProp_('GOOGLE_CLIENT_ID') || ''
+        googleClientId: getProp_('GOOGLE_CLIENT_ID') || '',
+        // כניסה דרך Firebase והתראות דחיפה (Firebase.js) — האפליקציה מציעה אותן רק כשהשרת תומך
+        firebaseAuth: fbAuthEnabled_(),
+        pushEnabled: pushEnabled_()
       };
       const tail = JSON.stringify(extra);
       const merged = body.slice(0, body.lastIndexOf('}')) + ',' + tail.slice(1);
@@ -152,6 +155,8 @@ function apiPing_() {
   // מה מוגדר בסקריפט – רק "מוגדר / לא מוגדר", בלי לחשוף ערכים. משמש את מסך החיבור באפליקציה.
   out.props = {
     googleClientId: !!getProp_('GOOGLE_CLIENT_ID'),
+    firebaseAuth: fbAuthEnabled_(),
+    firebasePush: pushEnabled_(),
     requireLogin: apiRequireLogin_(),
     archiveFolder: !!getProp_('MIKVEH_ARCHIVE_FOLDER_ID'),
     waAutoActions: getProp_('WA_AUTO_ACTIONS') === '1',
