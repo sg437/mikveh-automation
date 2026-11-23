@@ -121,8 +121,9 @@
     if (!c || started) return;
     started = true;
     try { if (sessionStorage.getItem(LOGIN_FLAG)) { sessionStorage.removeItem(LOGIN_FLAG); queue.unshift(['login', { method: 'google' }]); } } catch (e) { /* ignore */ }
-    loadScript('firebase-app-compat.js')
-      .then(() => loadScript('firebase-analytics-compat.js'))
+    // הטעינה משותפת עם הכניסה וההתראות (firebase.js), כדי שה-SDK לא ייטען פעמיים
+    (window.MikvehFirebase ? MikvehFirebase.use('analytics')
+      : loadScript('firebase-app-compat.js').then(() => loadScript('firebase-analytics-compat.js')))
       .then(() => window.firebase.analytics.isSupported())
       .then((ok) => {
         if (!ok) { queue = []; return; }

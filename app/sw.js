@@ -1,12 +1,12 @@
 /* Service worker: מטמון של קבצי האפליקציה לעבודה לא מקוונת. להעלות גרסה בכל שינוי.
    data.js (~3.6MB) אינו ברשימה בכוונה: הוא רק עותק גיבוי, והכללתו גרמה להורדה
    מחדש של 3.6MB בכל העלאת גרסה. הוא נכנס למטמון לבד אם וכאשר הוא נטען. */
-const CACHE = 'mikveh-app-v51';
+const CACHE = 'mikveh-app-v52';
 /* התשובה מהגיליון נשמרת במטמון נפרד, שאינו נמחק בהעלאת גרסה: האפליקציה
    מציגה אותו מיד בפתיחה, לפני שהרשת עונה, ולא היה טעם שהעלאת גרסה תחזיר
    כל אחד להמתנה מלאה בפתיחה שאחריה. */
 const DATA_CACHE = 'mikveh-data';
-const FILES = ['./', './index.html', './analytics.js', './app.js', './forms.js', './talk.js', './work.js', './media.js', './edit.js', './gate.js', './setup.js', './ask.js', './joinform.js', './perms.js', './projects.js', './contractor.js', './auth.js', './config.js', './hebdate.js', './manifest.json',
+const FILES = ['./', './index.html', './firebase.js', './analytics.js', './push.js', './app.js', './forms.js', './talk.js', './work.js', './media.js', './edit.js', './gate.js', './setup.js', './ask.js', './joinform.js', './perms.js', './projects.js', './contractor.js', './auth.js', './config.js', './hebdate.js', './manifest.json',
   './privacy.html', './terms.html', './legal.css',
   './icon-192.png', './icon-512.png', './icon-maskable-512.png', './apple-touch-icon.png',
   './talk-icon-192.png', './talk-icon-512.png', './talk-icon-maskable-512.png'];
@@ -53,7 +53,9 @@ self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
   // מדידת השימוש (Firebase Analytics) עוברת ישר לרשת: אין מה לשמור ממנה,
   // ותשובות אטומות (opaque) שלה היו תופסות מקום במטמון הנתונים לחינם.
-  if (/(^|\.)(google-analytics\.com|googletagmanager\.com|analytics\.google\.com|firebaseinstallations\.googleapis\.com|firebase\.googleapis\.com)$/.test(url.hostname)) return;
+  if (/(^|\.)(google-analytics\.com|googletagmanager\.com|analytics\.google\.com|firebaseinstallations\.googleapis\.com|firebase\.googleapis\.com|fcmregistrations\.googleapis\.com|identitytoolkit\.googleapis\.com|securetoken\.googleapis\.com)$/.test(url.hostname)) return;
+  // דפי הכניסה של Firebase Authentication (באתר שב-Firebase Hosting) אינם חלק מהאפליקציה
+  if (url.origin === self.location.origin && url.pathname.indexOf('/__/') === 0) return;
   // סיווג מפורש ולא לפי request.destination: ל-fetch() רגיל (וכך נטענים
   // הנתונים מהגיליון) ה-destination הוא מחרוזת ריקה, ולא 'empty' כפי שנראה
   // מהשם – וסיווג לפי זה שלח את הנתונים למסלול של קבצי האפליקציה.
@@ -93,4 +95,38 @@ self.addEventListener('fetch', (e) => {
       return fromCache(cached);
     }))
   );
+});
+
+// ==================== התראות דחיפה ====================
+// ההתראות נשלחות מהשרת דרך Firebase Cloud Messaging (Firebase.js) כ-data בלבד,
+// ומוצגות כאן — גם כשהאפליקציה סגורה. אין כאן קוד של Firebase: אירוע push
+// רגיל של הדפדפן, כך שה-Service Worker נשאר עצמאי ועובד גם בלי רשת.
+const PUSH_ICON = new URL('./icon-192.png', self.location).href;
+
+self.addEventListener('push', (e) => {
+  let p = {};
+  try { p = e.data ? e.data.json() : {}; } catch (err) { p = {}; }
+  const d = Object.assign({}, p.notification || {}, p.data || {});
+  e.waitUntil(self.registration.showNotification(d.title || 'מערכת המקוואות', {
+    body: d.body || '', icon: PUSH_ICON, badge: PUSH_ICON, dir: 'rtl', lang: 'he',
+    data: { url: d.url || '' },
+  }));
+});
+
+// לחיצה על התראה פותחת את האפליקציה הזו במסך שההתראה מדברת עליו. מהקישור
+// נלקח רק ה-hash (#/talk/...): האפליקציה נפתחת תמיד מהכתובת שבה היא מותקנת
+// במכשיר, גם אם הקישור שבהודעה מצביע על כתובת אחרת של אותה מערכת.
+self.addEventListener('notificationclick', (e) => {
+  e.notification.close();
+  const scope = self.registration.scope;
+  let hash = '';
+  try { hash = new URL((e.notification.data || {}).url || '', scope).hash; } catch (err) { hash = ''; }
+  const target = scope + hash;
+  e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
+    const own = list.filter((c) => { const u = c.url.split('#')[0].split('?')[0]; return u === scope || u === scope + 'index.html'; })[0];
+    if (!own) return self.clients.openWindow(target);
+    return own.focus()
+      .then((c) => (hash && c && c.navigate ? c.navigate(target) : c))
+      .catch(() => self.clients.openWindow(target));
+  }));
 });

@@ -1,0 +1,30 @@
+{
+  "hosting": {
+    "public": "app",
+    "ignore": ["**/.*", "**/node_modules/**", "data.js"],
+    "headers": [
+      {
+        "source": "**",
+        "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
+      },
+      {
+        "source": "**/*.@(png|jpg|jpeg|ico|svg|webp)",
+        "headers": [{ "key": "Cache-Control", "value": "public, max-age=86400" }]
+      }
+    ]
+  },
+  "firestore": {
+    "database": "(default)",
+    "location": "me-west1",
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
+  "auth": {
+    "providers": {
+      "googleSignIn": {
+        "oAuthBrandDisplayName": "מערכת כשרות המקוואות",
+        "supportEmail": "sg@taharat.org"
+      }
+    }
+  }
+}

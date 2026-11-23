@@ -55,6 +55,7 @@
       ['תיקיית מדיה בדרייב', p.archiveFolder ? OK : NO('MIKVEH_ARCHIVE_FOLDER_ID', '– בלעדיו אי אפשר להעלות תמונות')],
       ['קליטת פעולות מהוואטסאפ', p.waAutoActions ? OK : NO('WA_AUTO_ACTIONS=1')],
       ['התראות בוואטסאפ', p.notifyWhatsapp && p.greenApi ? OK : NO('NOTIFY_WHATSAPP=1', '+ חיבור Green API')],
+      ['התראות דחיפה (Firebase)', p.firebasePush ? OK : NO('FIREBASE_SERVICE_ACCOUNT', '– בלעדיו אין התראות למכשירים')],
       ['תזכורות תעודה', p.alertChat ? OK : NO('ALERT_CHAT_ID')],
       ['תכנון עבודה לקבוצת הוואטסאפ', p.waBridge ? OK + ' <small>– פתיחת משימות לחלוקה מודיעה לקבוצה</small>'
         : NO('WA_BRIDGE=1', '+ GROUP_CHAT_ID')],

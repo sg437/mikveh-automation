@@ -1384,6 +1384,7 @@
     $('#btnBack').addEventListener('click', () => { if (history.length > 1) history.back(); else location.hash = '#/'; });
     $('#navBackdrop').addEventListener('click', () => document.body.classList.remove('nav-open'));
     if (window.MikvehAuth) MikvehAuth.init();
+    if (window.MikvehPush) MikvehPush.refresh(); // רענון יומי של רישום המכשיר להתראות
     renderOutbox();
     Outbox.flush();
     window.addEventListener('online', () => Outbox.flush());

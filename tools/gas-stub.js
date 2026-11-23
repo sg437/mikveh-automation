@@ -2,6 +2,7 @@
 const fs = require('fs');
 const vm = require('vm');
 const path = require('path');
+const crypto = require('crypto');
 const REPO = '/home/user/mikveh-automation';
 
 function makeSheet(name, rtl) {
@@ -110,6 +111,15 @@ function load(files, extra) {
           .replace("ss", p(D.getSeconds()))
           .replace(/'/g, '');
       },
+      // מה ש-Firebase.js צריך: base64, גיבוב וחתימת RSA — באמצעות crypto של node
+      DigestAlgorithm: { SHA_256: 'sha256' },
+      Charset: { UTF_8: 'utf8' },
+      newBlob: (data) => ({ getDataAsString: () => Buffer.from(data).toString('utf8') }),
+      base64Decode: (s) => Array.from(Buffer.from(String(s), 'base64')),
+      base64DecodeWebSafe: (s) => Array.from(Buffer.from(String(s), 'base64url')),
+      base64EncodeWebSafe: (data) => Buffer.from(data).toString('base64').replace(/\+/g, '-').replace(/\//g, '_'),
+      computeDigest: (alg, text) => Array.from(new Int8Array(crypto.createHash(alg).update(String(text), 'utf8').digest())),
+      computeRsaSha256Signature: (text, key) => Array.from(crypto.createSign('RSA-SHA256').update(String(text)).sign(key)),
     },
     CacheService: { getScriptCache: () => cache },
     ScriptApp: {
@@ -146,6 +156,9 @@ function load(files, extra) {
   };
   sandbox.global = sandbox;
   vm.createContext(sandbox);
+  // Firebase.js נטען תמיד: notifyUsers_ (Auth.js) פונה אליו, וב-Apps Script כל
+  // הקבצים חיים יחד ממילא. בלי FIREBASE_SERVICE_ACCOUNT הוא כבוי ואינו פונה לרשת.
+  if (files.indexOf('Firebase.js') < 0) files = files.concat(['Firebase.js']);
   files.forEach((f) => {
     const code = fs.readFileSync(path.join(REPO, f), 'utf8');
     try { vm.runInContext(code, sandbox, { filename: f }); }
